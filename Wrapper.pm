@@ -2,7 +2,7 @@
 # Creation date: 2003-03-30 12:17:42
 # Authors: Don
 # Change log:
-# $Id: Wrapper.pm,v 1.12 2003/06/25 05:39:34 don Exp $
+# $Id: Wrapper.pm,v 1.13 2003/10/21 05:11:15 don Exp $
 #
 # All rights reserved. This program is free software; you can
 # redistribute it and/or modify it under the same terms as Perl
@@ -34,10 +34,14 @@ use strict;
 
 {   package DBIx::Wrapper;
 
+    # use 5.006; # should have at least Perl 5.6.0
+    
+    use Carp ();
+    
     use vars qw($VERSION);
 
     BEGIN {
-        $VERSION = 0.04; # update below in POD as well
+        $VERSION = '0.05'; # update below in POD as well
     }
 
     use DBI;
@@ -69,7 +73,12 @@ An alias for connect().
         my $self = $proto->_new;
 
         my $dbh = DBI->connect($data_source, $username, $auth, $attr);
-        return undef unless $dbh;
+        unless ($dbh) {
+            if ($self->_isDebugOn) {
+                $self->_printDebug(Carp::longmess($DBI::errstr));
+            }
+            return undef;
+        }
 
         $self->_setDatabaseHandle($dbh);
         $self->_setDataSource($data_source);
@@ -139,10 +148,21 @@ Return the underlying DBI object used to query the database.
 
         $self->_printDebug($query);
 
-        my $sth = $self->_getDatabaseHandle()->prepare($query)
-            or return $self->setErr(0, $DBI::errstr);
-        my $rv = $sth->execute(@values)
-            or return $self->setErr(1, $DBI::errstr);
+        my $dbh = $self->_getDatabaseHandle;
+        my $sth = $dbh->prepare($query);
+        unless ($sth) {
+            if ($self->_isDebugOn) {
+                $self->_printDebug(Carp::longmess($dbh->errstr) . "\nQuery was '$query'\n");
+            }
+            return $self->setErr(0, $dbh->errstr);
+        }
+        my $rv = $sth->execute(@values);
+        unless ($rv) {
+            if ($self->_isDebugOn) {
+                $self->_printDebug(Carp::longmess($dbh->errstr) . "\nQuery was '$query'\n");
+            }
+            return $self->setErr(1, $dbh->errstr);
+        }
         $sth->finish;
         
         return $rv;
@@ -213,10 +233,22 @@ the row(s) in the database.
 
         $self->_printDebug($query);
 
-        my $sth = $self->_getDatabaseHandle()->prepare($query)
-            or return $self->setErr(0, $DBI::errstr);
-        my $rv = $sth->execute(@values)
-            or return $self->setErr(1, $DBI::errstr);
+        my $dbh = $self->_getDatabaseHandle;
+        my $sth = $dbh->prepare($query);
+        unless ($sth) {
+            if ($self->_isDebugOn) {
+                $self->_printDebug(Carp::longmess($dbh->errstr) . "\nQuery was '$query'\n");
+            }
+            return $self->setErr(0, $dbh->errstr);
+        }
+        
+        my $rv = $sth->execute(@values);
+        unless ($rv) {
+            if ($self->_isDebugOn) {
+                $self->_printDebug(Carp::longmess($dbh->errstr) . "\nQuery was '$query'\n");
+            }
+            return $self->setErr(1, $dbh->errstr);
+        }
         $sth->finish;
         
         return $rv;
@@ -273,10 +305,21 @@ execute() called on a DBI object.
 
         $self->_printDebug($query);
 
-        my $sth = $self->_getDatabaseHandle()->prepare($query)
-            or return $self->setErr(0, $DBI::errstr);
-        my $rv = $sth->execute(@$exec_args)
-            or return $self->setErr(1, $DBI::errstr);
+        my $dbh = $self->_getDatabaseHandle;
+        my $sth = $dbh->prepare($query);
+        unless ($sth) {
+            if ($self->_isDebugOn) {
+                $self->_printDebug(Carp::longmess($dbh->errstr) . "\nQuery was '$query'\n");
+            }
+            return $self->setErr(0, $dbh->errstr);
+        }
+        my $rv = $sth->execute(@$exec_args);
+        unless ($rv) {
+            if ($self->_isDebugOn) {
+                $self->_printDebug(Carp::longmess($dbh->errstr) . "\nQuery was '$query'\n");
+            }
+            return $self->setErr(1, $dbh->errstr);
+        }
         my $result = $sth->fetchrow_hashref($self->getNameArg);
         $sth->finish;
 
@@ -304,10 +347,23 @@ each row is a hash representing a row of the result.
 
         $self->_printDebug($query);
 
-        my $sth = $self->_getDatabaseHandle()->prepare($query)
-            or return $self->setErr(0, $DBI::errstr);
-        my $rv = $sth->execute(@$exec_args)
-            or return $self->setErr(1, $DBI::errstr);
+        my $dbh = $self->_getDatabaseHandle;
+        my $sth = $dbh->prepare($query);
+        unless ($sth) {
+            if ($self->_isDebugOn) {
+                $self->_printDebug(Carp::longmess($dbh->errstr) . "\nQuery was '$query'\n");
+            }
+            return $self->setErr(0, $dbh->errstr);
+        }
+        
+        my $rv = $sth->execute(@$exec_args);
+        unless ($rv) {
+            if ($self->_isDebugOn) {
+                $self->_printDebug(Carp::longmess($dbh->errstr) . "\nQuery was '$query'\n");
+            }
+            return $self->setErr(1, $dbh->errstr);
+        }
+        
         my $rows = [];
         while (my $row = $sth->fetchrow_hashref($self->getNameArg)) {
             push @$rows, $row;
@@ -366,10 +422,21 @@ the methods provided by this module don't take into account.
 
         $self->_printDebug($query);
 
-        my $sth = $self->_getDatabaseHandle()->prepare($query)
-            or return $self->setErr(0, $DBI::errstr);
-        my $rv = $sth->execute(@$exec_args)
-            or return $self->setErr(1, $DBI::errstr);
+        my $dbh = $self->_getDatabaseHandle;
+        my $sth = $dbh->prepare($query);
+        unless ($sth) {
+            if ($self->_isDebugOn) {
+                $self->_printDebug(Carp::longmess($dbh->errstr) . "\nQuery was '$query'\n");
+            }
+            return $self->setErr(0, $dbh->errstr);
+        }
+        my $rv = $sth->execute(@$exec_args);
+        unless ($rv) {
+            if ($self->_isDebugOn) {
+                $self->_printDebug(Carp::longmess($dbh->errstr) . "\nQuery was '$query'\n");
+            }
+            return $self->setErr(1, $dbh->errstr);
+        }
         $sth->finish;
 
         return $rv;
@@ -454,13 +521,23 @@ Turns off debugging output.
     }
     *debug_off = \&debugOff;
 
+    sub _isDebugOn {
+        my ($self) = @_;
+        if (($$self{_debug} and $$self{_debug_fh})
+            or $ENV{'DBIX_WRAPPER_DEBUG'}) {
+            return 1;
+        }
+        return undef;
+    }
+    
     sub _printDebug {
         my ($self, $str) = @_;
-        unless ($$self{_debug} and $$self{_debug_fh}) {
+        unless ($self->_isDebugOn) {
             return undef;
         }
 
         my $fh = $$self{_debug_fh};
+        $fh = \*STDERR unless $fh;
         
         my $time = $self->_getCurDateTime;
 
@@ -483,7 +560,8 @@ Turns off debugging output.
 
         my @one_more = caller($frame + 1);
         $subroutine = $one_more[3];
-        $subroutine .= '()' unless $subroutine eq '';
+        $subroutine = '' unless defined($subroutine);
+        $subroutine .= '()' if $subroutine ne '';
         
         print $fh '*' x 60, "\n", "$time:$filename:$line:$subroutine\n", $str, "\n";
     }
@@ -519,6 +597,10 @@ Turns off debugging output.
     }
     *escape_string = \&escapeString;
 
+    sub _moduleHasSub {
+        my ($self, $module, $sub_name) = @_;
+    }
+    
     sub DESTROY {
         my ($self) = @_;
         return undef unless $self->_getDisconnect;
@@ -532,7 +614,7 @@ Turns off debugging output.
     sub getNameArg {
         my ($self) = @_;
         my $arg = $$self{_name_arg};
-        $arg = 'NAME_lc' if $arg eq '';
+        $arg = 'NAME_lc' unless defined($arg) and $arg ne '';
 
         return $arg;
     }
@@ -707,6 +789,6 @@ __END__
 
 =head1 VERSION
 
-    0.04
+    0.05
 
 =cut

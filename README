@@ -108,6 +108,9 @@ METHODS
     want the case of the field names to be what the underlying database
     driveer returns them as, call $db->setNameArg('NAME').
 
+  commit()
+    Calls commit() on the underlying DBI object to commit your transactions.
+
   There are also underscore_separated versions of these methods.
         E.g., nativeSelectLoop() becomes native_select_loop()
 
@@ -127,5 +130,5 @@ COPYRIGHT
         itself.
 
 VERSION
-        0.03
+        0.05
 
