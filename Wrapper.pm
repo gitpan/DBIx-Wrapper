@@ -2,7 +2,7 @@
 # Creation date: 2003-03-30 12:17:42
 # Authors: Don
 # Change log:
-# $Id: Wrapper.pm,v 1.7 2003/04/02 06:29:36 don Exp $
+# $Id: Wrapper.pm,v 1.8 2003/04/02 15:39:17 don Exp $
 #
 # All rights reserved. This program is free software; you can
 # redistribute it and/or modify it under the same terms as Perl
@@ -37,7 +37,7 @@ use strict;
     use vars qw($VERSION);
 
     BEGIN {
-        $VERSION = 0.01; # update below in POD as well
+        $VERSION = 0.02; # update below in POD as well
     }
 
     use DBI;
@@ -251,6 +251,9 @@ execute() called on a DBI object.
 
 =head2 nativeSelectMulti($query, @exec_args)
 
+Executes the query in $query and returns an array of rows, where
+each row is a hash representing a row of the result.
+
 =cut
     sub nativeSelectMulti {
         my ($self, $query, $exec_args) = @_;
@@ -280,6 +283,14 @@ execute() called on a DBI object.
 
 =head2 nativeSelectLoop($query, @exec_args)
 
+Executes the query in $query, then returns an object that allows
+you to loop through one result at a time, e.g.,
+
+    my $loop = $db->nativeSelectLoop("SELECT * FROM my_table");
+    while (my $row = $loop->next) {
+        my $id = $$row{id};
+    }
+
 =cut
     sub nativeSelectLoop {
         my ($self, $query, $exec_args) = @_;
@@ -292,6 +303,10 @@ execute() called on a DBI object.
 =pod
 
 =head2 nativeQuery($query, @exec_args)
+
+Executes the query in $query and returns true if successful.
+This is typically used for deletes and is a catchall for anything
+the methods provided by this module don't take into account.
 
 =cut
     sub nativeQuery {
@@ -318,6 +333,13 @@ execute() called on a DBI object.
 
 =head2 nativeQueryLoop($query)
 
+A loop on nativeQuery, where any placeholders you have put in
+your query are bound each time you call next().  E.g.,
+
+    my $loop = $db->nativeQueryLoop("UPDATE my_table SET value=? WHERE id=?");
+    $loop->next([ 'one', 1]);
+    $loop->next([ 'two', 2]);
+
 =cut
     sub nativeQueryLoop {
         my ($self, $query) = @_;
@@ -328,6 +350,17 @@ execute() called on a DBI object.
 =pod
 
 =head2 newCommand($cmd)
+
+This creates a literal SQL command for use in insert(), update(),
+and related methods, since if you simply put something like
+"CUR_DATE()" as a value in the %data parameter passed to insert,
+the function will get quoted, and so will not work as expected.
+Instead, do something like this:
+
+    my $data = { file => 'my_document.txt',
+                 the_date => $db->newCommand('CUR_DATE()')
+               };
+    $db->insert('my_doc_table', $data);
 
 =cut
     sub newCommand {
@@ -370,6 +403,20 @@ execute() called on a DBI object.
         return $arg;
     }
 
+=pod
+
+=head2 setNameArg($arg)
+
+This is the argument to pass to the fetchrow_hashref() call on
+the underlying DBI object.  By default, this is 'NAME_lc', so
+that all field names returned are all lowercase to provide for
+portable code.  If you want to make all the field names return be
+uppercase, call $db->setNameArg('NAME_uc') after the connect()
+call.  And if you really want the case of the field names to be
+what the underlying database driveer returns them as, call
+$db->setNameArg('NAME').
+
+=cut
     sub setNameArg {
         my ($self, $arg) = @_;
         $$self{_name_arg} = $arg;
@@ -462,6 +509,8 @@ __END__
 
 =over 4
 
+=item Allow creation from existing DBI handle.
+
 =item Logging
 
 =item Allow prepare() and execute()
@@ -485,6 +534,6 @@ __END__
 
 =head1 VERSION
 
-    0.01
+    0.02
 
 =cut

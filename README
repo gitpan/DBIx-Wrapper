@@ -1,1 +1,117 @@
-DBIx::Wrapper
+NAME
+    DBIx::Wrapper - A wrapper around the DBI
+
+SYNOPSIS
+    use DBIx::Wrapper;
+
+    my $db = DBIx::Wrapper->connect($dsn, $user, $auth, \%attr);
+
+DESCRIPTION
+    DBIx::Wrapper provides a wrapper around the DBI that makes it a bit
+    easier on the programmer. This module allows you to execute a query with
+    a single method call.
+
+METHODS
+  connect($data_source, $username, $auth, \%attr)
+    Connects to the given database. These are the same parameters you would
+    pass to the connect call when using DBI directly.
+
+  new($data_source, $username, $auth, \%attr)
+    An alias for connect().
+
+  insert($table, \%data)
+    Insert the provided row into the database. $table is the name of the
+    table you want to insert into. %data is the data you want to insert -- a
+    hash with key/value pairs representing a row to be insert into the
+    database.
+
+  replace($table, \%data)
+    Same as insert(), except does a REPLACE instead of an INSERT for
+    databases which support it.
+
+  update($table, \%keys, \%data)
+    Update the table using the key/value pairs in %keys to specify the WHERE
+    clause of the query. %data contains the new values for the row(s) in the
+    database.
+
+  smartUpdate($table, \%keys, \%data)
+    Same as update(), except that a check is first made to see if there are
+    any rows matching the data in %keys. If so, update() is called,
+    otherwise, insert() is called.
+
+  nativeSelect($query, \@exec_args)
+    Executes the query in $query and returns a single row result. If there
+    are multiple rows in the result, the rest get silently dropped.
+    @exec_args are the same arguments you would pass to an execute() called
+    on a DBI object.
+
+  nativeSelectMulti($query, @exec_args)
+    Executes the query in $query and returns an array of rows, where each
+    row is a hash representing a row of the result.
+
+  nativeSelectLoop($query, @exec_args)
+    Executes the query in $query, then returns an object that allows you to
+    loop through one result at a time, e.g.,
+
+        my $loop = $db->nativeSelectLoop("SELECT * FROM my_table");
+        while (my $row = $loop->next) {
+            my $id = $$row{id};
+        }
+
+  nativeQuery($query, @exec_args)
+    Executes the query in $query and returns true if successful. This is
+    typically used for deletes and is a catchall for anything the methods
+    provided by this module don't take into account.
+
+  nativeQueryLoop($query)
+    A loop on nativeQuery, where any placeholders you have put in your query
+    are bound each time you call next(). E.g.,
+
+        my $loop = $db->nativeQueryLoop("UPDATE my_table SET value=? WHERE id=?");
+        $loop->next([ 'one', 1]);
+        $loop->next([ 'two', 2]);
+
+  newCommand($cmd)
+    This creates a literal SQL command for use in insert(), update(), and
+    related methods, since if you simply put something like "CUR_DATE()" as
+    a value in the %data parameter passed to insert, the function will get
+    quoted, and so will not work as expected. Instead, do something like
+    this:
+
+        my $data = { file => 'my_document.txt',
+                     the_date => $db->newCommand('CUR_DATE()')
+                   };
+        $db->insert('my_doc_table', $data);
+
+  setNameArg($arg)
+    This is the argument to pass to the fetchrow_hashref() call on the
+    underlying DBI object. By default, this is 'NAME_lc', so that all field
+    names returned are all lowercase to provide for portable code. If you
+    want to make all the field names return be uppercase, call
+    $db->setNameArg('NAME_uc') after the connect() call. And if you really
+    want the case of the field names to be what the underlying database
+    driveer returns them as, call $db->setNameArg('NAME').
+
+  There are also underscore_separated versions of these methods.
+        E.g., nativeSelectLoop() becomes native_select_loop()
+
+EXAMPLES
+TODO
+    Allow creation from existing DBI handle.
+    Logging
+    Allow prepare() and execute()
+
+BUGS
+AUTHOR
+        Don Owens <don@owensnet.com>
+
+COPYRIGHT
+        Copyright (c) 2003 Don Owens
+
+        All rights reserved. This program is free software; you can
+        redistribute it and/or modify it under the same terms as Perl
+        itself.
+
+VERSION
+        0.02
+
