@@ -2,7 +2,7 @@
 # Creation date: 2003-03-30 12:17:42
 # Authors: Don
 # Change log:
-# $Id: Wrapper.pm,v 1.33 2004/07/01 06:37:11 don Exp $
+# $Id: Wrapper.pm,v 1.35 2004/07/21 04:06:53 don Exp $
 #
 # Copyright (c) 2003-2004 Don Owens
 #
@@ -22,15 +22,25 @@ DBIx::Wrapper - A wrapper around the DBI
 
  my $db = DBIx::Wrapper->connect($dsn, $user, $auth, \%attr);
 
+ my $db = DBIx::Wrapper->connect($dsn, $user, $auth, \%attr,
+          { error_handler => sub { print $DBI::errstr },
+            debug_handler => sub { print $DBI::errstr },
+          });
+
  my $dbi_obj = DBI->connect(...)
  my $db = DBIx::Wrapper->newFromDBI($dbi_obj);
 
  my $dbi_obj = $db->getDBI;
 
  my $rv = $db->insert($table, { id => 5, val => "myval",
-                                the_date => \"NOW()"
+                                the_date => \"NOW()",
                               });
+ my $rv = $db->insert($table, { id => 5, val => "myval",
+                                the_date => $db->command("NOW()"),
+                              });
+
  my $rv = $db->replace($table, \%data);
+ my $rv = $db->smartReplace($table, \%data)
  my $rv = $db->delete($table, \%keys);
  my $rv = $db->update($table, \%keys, \%data);
  my $rv = $db->smartUpdate($table, \%keys, \%data);
@@ -66,6 +76,9 @@ DBIx::Wrapper - A wrapper around the DBI
  my $rows = $db->abstractSelectMulti($table, \@fields, \%where, \@order);
 
  my $loop = $db->nativeSelectLoop($query, @exec_args);
+ while (my $row = $loop->next) {
+     my $id = $$row{id};
+ }
 
  my $rv = $db->nativeQuery($query, @exec_args);
 
@@ -104,7 +117,7 @@ use strict;
     use vars qw($VERSION);
 
     BEGIN {
-        $VERSION = '0.11'; # update below in POD as well
+        $VERSION = '0.12'; # update below in POD as well
     }
 
     use DBI;
@@ -122,10 +135,38 @@ use strict;
 
 =pod
 
-=head2 connect($data_source, $username, $auth, \%attr)
+=head2 connect($data_source, $username, $auth, \%attr, \%params)
 
-Connects to the given database.  These are the same parameters
-you would pass to the connect call when using DBI directly.
+Connects to the given database.  The first four parameters are
+the same parameters you would pass to the connect call when using
+DBI directly.
+
+The %params hash is optional and contains extra parameters to
+control the behaviour of DBIx::Wrapper itself.  Currently the
+only valid entries are error_handler and debug_handler, the value
+of which should either be a reference to a subroutine, or a
+reference to an array whose first element is an object and whose
+second element is a method name to call on that object.  The
+parameters passed to the error_handler callback are the current
+DBIx::Wrapper object and an error string, usually the query if
+appropriate.  The parameters passed to the debug_handler callback
+are the current DBIx::Wrapper object, an error string, and the
+filehandle passed to the debugOn() method (defaults to STDERR).
+E.g.,
+
+  sub do_error {
+      my ($db, $str) = @_;
+      print $DBI::errstr;
+  }
+  sub do_debug {
+      my ($db, $str, $fh) = @_;
+      print $fh "query was: $str\n";
+  }
+
+  my $db = DBIx::Wrapper->connect($ds, $un, $auth, \%attr,
+                                  { error_handler => \&do_error,
+                                    debug_handler => \&do_debug,
+                                  });
 
 =head2 new($data_source, $username, $auth, \%attr)
 
@@ -133,7 +174,7 @@ An alias for connect().
 
 =cut
     sub connect {
-        my ($proto, $data_source, $username, $auth, $attr) = @_;
+        my ($proto, $data_source, $username, $auth, $attr, $params) = @_;
         my $self = $proto->_new;
 
         my $dbh = DBI->connect($data_source, $username, $auth, $attr);
@@ -151,12 +192,17 @@ An alias for connect().
             return undef;
         }
 
+        $params = {} unless UNIVERSAL::isa($params, 'HASH');
+        
         $self->_setDatabaseHandle($dbh);
         $self->_setDataSource($data_source);
         $self->_setUsername($username);
         $self->_setAuth($auth);
         $self->_setAttr($attr);
         $self->_setDisconnect(1);
+
+        $self->_setErrorHandler($params->{error_handler}) if $params->{error_handler};
+        $self->_setDebugHandler($params->{debug_handler}) if $params->{debug_handler};
 
         return $self;
     }
@@ -358,6 +404,8 @@ databases which support it.
             }
         }
     }
+
+    *smart_replace = \&smartReplace;
 
 =pod
 
@@ -912,6 +960,7 @@ on error.
 
         return undef;
     }
+    *native_select_value = \&nativeSelectValue;
 
 =pod
 
@@ -1048,6 +1097,8 @@ your query are bound each time you call next().  E.g.,
 
 =head2 newCommand($cmd)
 
+This method is deprecated.  Use $db->command($cmd_str) instead.
+
 This creates a literal SQL command for use in insert(), update(),
 and related methods, since if you simply put something like
 "CUR_DATE()" as a value in the %data parameter passed to insert,
@@ -1074,6 +1125,37 @@ SQL command, e.g.,
         return DBIx::Wrapper::SQLCommand->new($contents);
     }
     *new_command = \&newCommand;
+
+=pod
+
+=head2 command($cmd_string)
+
+This creates a literal SQL command for use in insert(), update(),
+and related methods, since if you simply put something like
+"CUR_DATE()" as a value in the %data parameter passed to insert,
+the function will get quoted, and so will not work as expected.
+Instead, do something like this:
+
+    my $data = { file => 'my_document.txt',
+                 the_date => $db->command('CUR_DATE()')
+               };
+    $db->insert('my_doc_table', $data);
+
+This can also be done by passing a reference to a string with the
+SQL command, e.g.,
+
+    my $data = { file => 'my_document.txt',
+                 the_date => \'CUR_DATE()'
+               };
+    $db->insert('my_doc_table', $data);
+
+This is currently how command() is implemented.
+
+=cut
+    sub command {
+        my ($self, $str) = @_;
+        return \$str;
+    }
 
 =pod
 
@@ -1121,6 +1203,23 @@ Turns off debugging output.
     sub _printDbiError {
         my ($self, $extra) = @_;
 
+        my $handler = $self->_getErrorHandler;
+        $handler = [ $self, \&_default_error_handler ] unless $handler;
+        if ($handler) {
+            if (UNIVERSAL::isa($handler, 'ARRAY')) {
+                my ($obj, $meth) = @$handler;
+                return $obj->$meth($self, $extra);
+            } else {
+                return $handler->($self, $extra);
+            }
+        }
+
+        return undef;
+    }
+
+    sub _default_error_handler {
+        my ($self, $db, $extra) = @_;
+
         return undef unless ($self->getDebugLevel | 2);
 
         my $str = Carp::longmess($DBI::errstr);
@@ -1155,18 +1254,11 @@ Turns off debugging output.
         $subroutine .= '()' if $subroutine ne '';
         
         print $fh '*' x 60, "\n", "$time:$filename:$line:$subroutine\n", $str, "\n";
-
     }
-    
-    sub _printDebug {
-        my ($self, $str) = @_;
-        unless ($self->_isDebugOn) {
-            return undef;
-        }
 
-        my $fh = $$self{_debug_fh};
-        $fh = \*STDERR unless $fh;
-        
+    sub _default_debug_handler {
+        my ($self, $db, $str, $fh) = @_;
+
         my $time = $self->_getCurDateTime;
 
         my ($package, $filename, $line, $subroutine, $hasargs,
@@ -1192,6 +1284,29 @@ Turns off debugging output.
         $subroutine .= '()' if $subroutine ne '';
         
         print $fh '*' x 60, "\n", "$time:$filename:$line:$subroutine\n", $str, "\n";
+    }
+    
+    sub _printDebug {
+        my ($self, $str) = @_;
+        unless ($self->_isDebugOn) {
+            return undef;
+        }
+
+        my $fh = $$self{_debug_fh};
+        $fh = \*STDERR unless $fh;
+
+        my $handler = $self->_getDebugHandler;
+        $handler = [ $self, \&_default_debug_handler ] unless $handler;
+        if ($handler) {
+            if (UNIVERSAL::isa($handler, 'ARRAY')) {
+                my ($obj, $meth) = @$handler;
+                return $obj->$meth($self, $str, $fh);
+            } else {
+                return $handler->($self, $str, $fh);
+            }
+        }
+
+        return undef;
     }
 
     sub _getCurDateTime {
@@ -1354,6 +1469,24 @@ called.
         return $$self{_should_disconnect};
     }
 
+    sub _setErrorHandler {
+        my ($self, $handler) = @_;
+        $$self{_error_handler} = $handler;
+    }
+
+    sub _getErrorHandler {
+        return shift()->{_error_handler};
+    }
+
+    sub _setDebugHandler {
+        my ($self, $handler) = @_;
+        $$self{_debug_handler} = $handler;
+    }
+    
+    sub _getDebugHandler {
+        return shift()->{_debug_handler};
+    }
+
     # whether or not to disconnect when the Wrapper object is
     # DESTROYed
     sub _setDisconnect {
@@ -1482,6 +1615,6 @@ __END__
 
 =head1 VERSION
 
-    0.11
+    0.12
 
 =cut

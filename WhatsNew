@@ -1,3 +1,8 @@
+Version 0.12
+        * New optional parameter \%params in the connect() method
+        * command($str) method to return a scalar reference needed to
+          pass to insert(), replace(), etc., to pass literal SQL.
+
 Version 0.11
         * $db->update() and $db->nativeQuery() now return the number
           of rows affected by the query, if available.

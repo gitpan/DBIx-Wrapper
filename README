@@ -1,344 +1,452 @@
-NAME
-    DBIx::Wrapper - A wrapper around the DBI
+DBIx::Wrapper(3)      User Contributed Perl Documentation     DBIx::Wrapper(3)
 
-SYNOPSIS
-     use DBIx::Wrapper;
 
-     my $db = DBIx::Wrapper->connect($dsn, $user, $auth, \%attr);
 
-     my $dbi_obj = DBI->connect(...)
-     my $db = DBIx::Wrapper->newFromDBI($dbi_obj);
+NNAAMMEE
+       DBIx::Wrapper - A wrapper around the DBI
 
-     my $dbi_obj = $db->getDBI;
+SSYYNNOOPPSSIISS
+        use DBIx::Wrapper;
 
-     my $rv = $db->insert($table, { id => 5, val => "myval",
-                                    the_date => \"NOW()"
-                                  });
-     my $rv = $db->replace($table, \%data);
-     my $rv = $db->delete($table, \%keys);
-     my $rv = $db->update($table, \%keys, \%data);
-     my $rv = $db->smartUpdate($table, \%keys, \%data);
+        my $db = DBIx::Wrapper->connect($dsn, $user, $auth, \%attr);
 
-     my $row = $db->selectFromHash($table, \%keys);
-     my $row = $db->nativeSelect($query, \@exec_args);
+        my $db = DBIx::Wrapper->connect($dsn, $user, $auth, \%attr,
+                 { error_handler => sub { print $DBI::errstr },
+                   debug_handler => sub { print $DBI::errstr },
+                 });
 
-     my $loop = $db->nativeSelectExecLoop($query);
-     foreach my $val (@vals) {
-         my $row = $loop->next([ $val ]);
-     }
+        my $dbi_obj = DBI->connect(...)
+        my $db = DBIx::Wrapper->newFromDBI($dbi_obj);
 
-     my $row = $db->nativeSelectWithArrayRef($query, \@exec_args);
+        my $dbi_obj = $db->getDBI;
 
-     my $rows = $db->nativeSelectMulti($query, \@exec_args);
+        my $rv = $db->insert($table, { id => 5, val => "myval",
+                                       the_date => \"NOW()",
+                                     });
+        my $rv = $db->insert($table, { id => 5, val => "myval",
+                                       the_date => $db->command("NOW()"),
+                                     });
 
-     my $loop = $db->nativeSelectMultiExecLoop($query)
-     foreach my $val (@vals) {
-         my $rows = $loop->next([ $val ]);
-     }
+        my $rv = $db->replace($table, \%data);
+        my $rv = $db->smartReplace($table, \%data)
+        my $rv = $db->delete($table, \%keys);
+        my $rv = $db->update($table, \%keys, \%data);
+        my $rv = $db->smartUpdate($table, \%keys, \%data);
 
-     my $rows = $db->nativeSelectMultiWithArrayRef($query, \@exec_args);
+        my $row = $db->selectFromHash($table, \%keys);
+        my $row = $db->nativeSelect($query, \@exec_args);
 
-     my $hash = $db->nativeSelectMapping($query, \@exec_args);
-     my $hash = $db->nativeSelectDynaMapping($query, \@cols, \@exec_args);
+        my $loop = $db->nativeSelectExecLoop($query);
+        foreach my $val (@vals) {
+            my $row = $loop->next([ $val ]);
+        }
 
-     my $hash = $db->nativeSelectRecordMapping($query, \@exec_args);
-     my $hash = $db->nativeSelectRecordDynaMapping($query, $col, \@exec_args);
+        my $row = $db->nativeSelectWithArrayRef($query, \@exec_args);
 
-     my $val = $db->nativeSelectValue($query, \@exec_args);
+        my $rows = $db->nativeSelectMulti($query, \@exec_args);
 
-     my $row = $db->abstractSelect($table, \@fields, \%where, \@order);
-     my $rows = $db->abstractSelectMulti($table, \@fields, \%where, \@order);
+        my $loop = $db->nativeSelectMultiExecLoop($query)
+        foreach my $val (@vals) {
+            my $rows = $loop->next([ $val ]);
+        }
 
-     my $loop = $db->nativeSelectLoop($query, @exec_args);
+        my $rows = $db->nativeSelectMultiWithArrayRef($query, \@exec_args);
 
-     my $rv = $db->nativeQuery($query, @exec_args);
+        my $hash = $db->nativeSelectMapping($query, \@exec_args);
+        my $hash = $db->nativeSelectDynaMapping($query, \@cols, \@exec_args);
 
-     my $loop = $db->nativeQueryLoop("UPDATE my_table SET value=? WHERE id=?");
-     $loop->next([ 'one', 1]);
-     $loop->next([ 'two', 2]);
+        my $hash = $db->nativeSelectRecordMapping($query, \@exec_args);
+        my $hash = $db->nativeSelectRecordDynaMapping($query, $col, \@exec_args);
 
-     my $id = $db->getLastInsertId;
+        my $val = $db->nativeSelectValue($query, \@exec_args);
 
-     $db->debugOn(\*FILE_HANDLE);
+        my $row = $db->abstractSelect($table, \@fields, \%where, \@order);
+        my $rows = $db->abstractSelectMulti($table, \@fields, \%where, \@order);
 
-     $db->setNameArg($arg)
-
-     $db->commit();
-     $db->ping();
-     $db->err();
-
-DESCRIPTION
-    DBIx::Wrapper provides a wrapper around the DBI that makes it a bit
-    easier on the programmer. This module allows you to execute a query with
-    a single method call.
-
-METHODS
-  connect($data_source, $username, $auth, \%attr)
-    Connects to the given database. These are the same parameters you would
-    pass to the connect call when using DBI directly.
-
-  new($data_source, $username, $auth, \%attr)
-    An alias for connect().
-
-  newFromDBI($dbh)
-    Returns a new DBIx::Wrapper object from a DBI object that has already
-    been created. Note that when created this way, disconnect() will not be
-    called automatically on the underlying DBI object when the DBIx::Wrapper
-    object goes out of scope.
-
-  getDBI()
-    Return the underlying DBI object used to query the database.
-
-  insert($table, \%data)
-    Insert the provided row into the database. $table is the name of the
-    table you want to insert into. %data is the data you want to insert -- a
-    hash with key/value pairs representing a row to be insert into the
-    database.
-
-  replace($table, \%data)
-    Same as insert(), except does a REPLACE instead of an INSERT for
-    databases which support it.
-
-  smartReplace($table, \%data)
-     This method is MySQL specific.  If $table has an auto_increment
-     column, the return value will be the value of the auto_increment
-     column.  So if that column was specified in \%data, that value
-     will be returned, otherwise, an insert will be performed and the
-     value of LAST_INSERT_ID() will be returned.  If there is no
-     auto_increment column, but primary keys are provided, the row
-     containing the primary keys will be returned.  Otherwise, a true
-     value will be returned upon success.
-
-  delete($table, \%keys), delete($table, \@keys)
-     Delete rows from table $table using the key/value pairs in %keys
-     to specify the WHERE clause of the query.  Multiple key/value
-     pairs are joined with 'AND' in the WHERE clause.  The cols
-     parameter can optionally be an array ref instead of a hashref.
-     E.g.
-
-         $db->delete($table, [ key1 => $val1, key2 => $val2 ])
-
-     This is so that the order of the parameters in the WHERE clause
-     are kept in the same order.  This is required to use the correct
-     multi field indexes in some databases.
-
-  update($table, \%keys, \%data), update($table, \@keys, \%data)
-     Update the table using the key/value pairs in %keys to specify
-     the WHERE clause of the query.  %data contains the new values
-     for the row(s) in the database.  The keys parameter can
-     optionally be an array ref instead of a hashref.  E.g.,
-
-         $db->update($table, [ key1 => $val1, key2 => $val2 ], \%data);
-
-     This is so that the order of the parameters in the WHERE clause
-     are kept in the same order.  This is required to use the correct
-     multi field indexes in some databases.
-
-  selectFromHash($table, \%keys);
-     Select from table $table using the key/value pairs in %keys to
-     specify the WHERE clause of the query.  Multiple key/value pairs
-     are joined with 'AND' in the WHERE clause.  Returns a single row
-     as a hashref.
-
-  smartUpdate($table, \%keys, \%data)
-    Same as update(), except that a check is first made to see if there are
-    any rows matching the data in %keys. If so, update() is called,
-    otherwise, insert() is called.
-
-  nativeSelect($query, \@exec_args)
-    Executes the query in $query and returns a single row result (as a hash
-    ref). If there are multiple rows in the result, the rest get silently
-    dropped. @exec_args are the same arguments you would pass to an
-    execute() called on a DBI object. Returns undef on error.
-
-  nativeSelectExecLoop($query)
-     Like nativeSelect(), but returns a loop object that can be used
-     to execute the same query over and over with different bind
-     parameters.  This does a single DBI prepare() instead of a new
-     prepare() for select.
-
-     E.g.,
-
-         my $loop = $db->nativeSelectExecLoop("SELECT * FROM mytable WHERE id=?");
-         foreach my $id (@ids) {
-             my $row = $loop->next([ $id ]);
-         }
-
-  nativeSelectWithArrayRef($query, \@exec_args)
-     Like nativeSelect(), but return a reference to an array instead
-     of a hash.  Returns undef on error.  If there are no results
-     from the query, a reference to an empty array is returned.
-
-  nativeSelectMulti($query, \@exec_args)
-     Executes the query in $query and returns an array of rows, where
-     each row is a hash representing a row of the result.  Returns
-     undef on error.  If there are no results for the query, an empty
-     array ref is returned.
-
-  nativeSelectMultiExecLoop($query)
-     Like nativeSelectExecLoop(), but returns an array of rows, where
-     each row is a hash representing a row of the result.
-
-  nativeSelectMultiWithArrayRef($query, \@exec_args)
-     Like nativeSelectMulti(), but return a reference to an array of
-     arrays instead of to an array of hashes.  Returns undef on error.
-
-  nativeSelectMapping($query, \@exec_args)
-     Executes the given query and returns a reference to a hash
-     containing the first and second columns of the results as
-     key/value pairs.
-
-  nativeSelectDynaMapping($query, \@cols, \@exec_args)
-     Similar to nativeSelectMapping() except you specify which
-     columns to use for the key/value pairs in the return hash.  If
-     the first element of @cols starts with a digit, then @cols is
-     assumed to contain indexes for the two columns you wish to use.
-     Otherwise, @cols is assumed to contain the field names for the
-     two columns you wish to use.
-
-     For example,
-
-         nativeSelectMapping($query, \@exec_args) is
-
-      equivalent (and in fact calls) to
-
-         nativeSelectDynaMapping($query, [ 0, 1 ], $exec_args).
-
-  nativeSelectRecordMapping($query, \@exec_args)
-     Similar to nativeSelectMapping(), except the values in the hash
-     are references to the corresponding record (as a hash).
-
-  nativeSelectRecordDynaMapping($query, $col, \@exec_args)
-     Similar to nativeSelectRecordMapping(), except you specify
-     which column is the key in each key/value pair in the hash.  If
-     $col starts with a digit, then it is assumed to contain the
-     index for the column you wish to use.  Otherwise, $col is
-     assumed to contain the field name for the two columns you wish
-     to use.
-
-  nativeSelectValue($query, \@exec_args)
-     Returns a single value, the first column from the first row of
-     the result.  Returns undef on error or if there are no rows in
-     the result.  Note this may be the same value returned for a NULL
-     value in the result.
-
-  abstractSelect($table, \@fields, \%where, \@order)
-    Same as nativeSelect() except uses SQL::Abstract to generate the SQL.
-    See the POD for SQL::Abstract for usage. You must have SQL::Abstract
-    installed for this method to work.
-
-  abstractSelectMulti($table, \@fields, \%where, \@order)
-    Same as nativeSelectMulti() except uses SQL::Abstract to generate the
-    SQL. See the POD for SQL::Abstract for usage. You must have
-    SQL::Abstract installed for this method to work.
-
-  nativeSelectLoop($query, @exec_args)
-    Executes the query in $query, then returns an object that allows you to
-    loop through one result at a time, e.g.,
-
-        my $loop = $db->nativeSelectLoop("SELECT * FROM my_table");
+        my $loop = $db->nativeSelectLoop($query, @exec_args);
         while (my $row = $loop->next) {
             my $id = $$row{id};
         }
 
-        To get the number of rows selected, you can call the
-        rowCountCurrent() method on the loop object, e.g.,
-
-        my $loop = $db->nativeSelectLoop("SELECT * FROM my_table");
-        my $rows_in_result = $loop->rowCountCurrent;
-
-        The count() method is an alias for rowCountCurrent().
-
-        To get the number of rows returned by next() so far, use the
-        rowCountTotal() method.
-
-  nativeQuery($query, @exec_args)
-    Executes the query in $query and returns true if successful. This is
-    typically used for deletes and is a catchall for anything the methods
-    provided by this module don't take into account.
-
-  nativeQueryLoop($query)
-    A loop on nativeQuery, where any placeholders you have put in your query
-    are bound each time you call next(). E.g.,
+        my $rv = $db->nativeQuery($query, @exec_args);
 
         my $loop = $db->nativeQueryLoop("UPDATE my_table SET value=? WHERE id=?");
-        $loop->next([ 'one', 1]);
-        $loop->next([ 'two', 2]);
+        $loop->next([ ’one’, 1]);
+        $loop->next([ ’two’, 2]);
 
-  newCommand($cmd)
-    This creates a literal SQL command for use in insert(), update(), and
-    related methods, since if you simply put something like "CUR_DATE()" as
-    a value in the %data parameter passed to insert, the function will get
-    quoted, and so will not work as expected. Instead, do something like
-    this:
+        my $id = $db->getLastInsertId;
 
-        my $data = { file => 'my_document.txt',
-                     the_date => $db->newCommand('CUR_DATE()')
-                   };
-        $db->insert('my_doc_table', $data);
+        $db->debugOn(\*FILE_HANDLE);
 
-    This can also be done by passing a reference to a string with the SQL
-    command, e.g.,
+        $db->setNameArg($arg)
 
-        my $data = { file => 'my_document.txt',
-                     the_date => \'CUR_DATE()'
-                   };
-        $db->insert('my_doc_table', $data);
+        $db->commit();
+        $db->ping();
+        $db->err();
 
-  debugOn(\*FILE_HANDLE)
-    Turns on debugging output. Debugging information will be printed to the
-    given filehandle.
+DDEESSCCRRIIPPTTIIOONN
+       DBIx::Wrapper provides a wrapper around the DBI that makes it a bit
+       easier on the programmer.  This module allows you to execute a query
+       with a single method call.
 
-  debugOff()
-    Turns off debugging output.
+MMEETTHHOODDSS
+       ccoonnnneecctt(($$ddaattaa__ssoouurrccee,, $$uusseerrnnaammee, $auth, \%attr, \%params)
 
-  setNameArg($arg)
-    This is the argument to pass to the fetchrow_hashref() call on the
-    underlying DBI object. By default, this is 'NAME_lc', so that all field
-    names returned are all lowercase to provide for portable code. If you
-    want to make all the field names return be uppercase, call
-    $db->setNameArg('NAME_uc') after the connect() call. And if you really
-    want the case of the field names to be what the underlying database
-    driveer returns them as, call $db->setNameArg('NAME').
+       Connects to the given database.  The first four parameters are the same
+       parameters you would pass to the connect call when using DBI directly.
 
-  err()
-    Calls err() on the underlying DBI object, which returns the native
-    database engine error code from the last driver method called.
+       The %params hash is optional and contains extra parameters to control
+       the behaviour of DBIx::Wrapper itself.  Currently the only valid
+       entries are error_handler and debug_handler, the value of which should
+       either be a reference to a subroutine, or a reference to an array whose
+       first element is an object and whose second element is a method name to
+       call on that object.  The parameters passed to the error_handler call-
+       back are the current DBIx::Wrapper object and an error string, usually
+       the query if appropriate.  The parameters passed to the debug_handler
+       callback are the current DBIx::Wrapper object, an error string, and the
+       filehandle passed to the _d_e_b_u_g_O_n_(_) method (defaults to STDERR).  E.g.,
 
-  commit()
-    Calls commit() on the underlying DBI object to commit your transactions.
+         sub do_error {
+             my ($db, $str) = @_;
+             print $DBI::errstr;
+         }
+         sub do_debug {
+             my ($db, $str, $fh) = @_;
+             print $fh "query was: $str\n";
+         }
 
-  ping()
-    Calls ping() on the underlying DBI object to see if the database
-    connection is still up.
+         my $db = DBIx::Wrapper->connect($ds, $un, $auth, \%attr,
+                                         { error_handler => \&do_error,
+                                           debug_handler => \&do_debug,
+                                         });
 
-  getLastInsertId(), get_last_insert_id(), last_insert_id()
-     Returns the last_insert_id.  This is MySQL specific for now.  It
-     just runs the query "SELECT LAST_INSERT_ID()".
+       nneeww(($$ddaattaa__ssoouurrccee,, $$uusseerrnnaammee, $auth, \%attr)
 
-  There are also underscore_separated versions of these methods.
-        E.g., nativeSelectLoop() becomes native_select_loop()
+       An alias for _c_o_n_n_e_c_t_(_).
 
-TODO
-    More logging/debugging options
-    Allow prepare() and execute() for easier integration into existing code.
+       nneewwFFrroommDDBBII(($$ddbbhh))
 
-ACKNOWLEDGEMENTS
-        People who have contributed ideas and/or code for this module:
+       Returns a new DBIx::Wrapper object from a DBI object that has already
+       been created.  Note that when created this way, _d_i_s_c_o_n_n_e_c_t_(_) will not
+       be called automatically on the underlying DBI object when the
+       DBIx::Wrapper object goes out of scope.
 
-        Kevin Wilson
-        Mark Stosberg
+       _g_e_t_D_B_I_(_)
 
-AUTHOR
-        Don Owens <don@owensnet.com>
+       Return the underlying DBI object used to query the database.
 
-COPYRIGHT
-        Copyright (c) 2003-2004 Don Owens
+       iinnsseerrtt(($$ttaabbllee,, \\%%ddaattaa))
 
-        All rights reserved. This program is free software; you can
-        redistribute it and/or modify it under the same terms as Perl
-        itself.
+       Insert the provided row into the database.  $table is the name of the
+       table you want to insert into.  %data is the data you want to insert --
+       a hash with key/value pairs representing a row to be insert into the
+       database.
 
-VERSION
-        0.11
+       rreeppllaaccee(($$ttaabbllee,, \\%%ddaattaa))
 
+       Same as _i_n_s_e_r_t_(_), except does a REPLACE instead of an INSERT for
+       databases which support it.
+
+       ssmmaarrttRReeppllaaccee(($$ttaabbllee,, \\%%ddaattaa))
+
+        This method is MySQL specific.  If $table has an auto_increment
+        column, the return value will be the value of the auto_increment
+        column.  So if that column was specified in \%data, that value
+        will be returned, otherwise, an insert will be performed and the
+        value of LAST_INSERT_ID() will be returned.  If there is no
+        auto_increment column, but primary keys are provided, the row
+        containing the primary keys will be returned.  Otherwise, a true
+        value will be returned upon success.
+
+       ddeelleettee(($$ttaabbllee,, \\%%kkeeyyss)),, ddeelleettee(($$ttaabbllee,, \\@@kkeeyyss))
+
+        Delete rows from table $table using the key/value pairs in %keys
+        to specify the WHERE clause of the query.  Multiple key/value
+        pairs are joined with ’AND’ in the WHERE clause.  The cols
+        parameter can optionally be an array ref instead of a hashref.
+        E.g.
+
+            $db->delete($table, [ key1 => $val1, key2 => $val2 ])
+
+        This is so that the order of the parameters in the WHERE clause
+        are kept in the same order.  This is required to use the correct
+        multi field indexes in some databases.
+
+       uuppddaattee(($$ttaabbllee,, \\%%kkeeyyss,, \\%%ddaattaa)),, uuppddaattee(($$ttaabbllee,, \\@@kkeeyyss,, \\%%ddaattaa))
+
+        Update the table using the key/value pairs in %keys to specify
+        the WHERE clause of the query.  %data contains the new values
+        for the row(s) in the database.  The keys parameter can
+        optionally be an array ref instead of a hashref.  E.g.,
+
+            $db->update($table, [ key1 => $val1, key2 => $val2 ], \%data);
+
+        This is so that the order of the parameters in the WHERE clause
+        are kept in the same order.  This is required to use the correct
+        multi field indexes in some databases.
+
+       sseelleeccttFFrroommHHaasshh(($$ttaabbllee,, \\%%kkeeyyss));;
+
+        Select from table $table using the key/value pairs in %keys to
+        specify the WHERE clause of the query.  Multiple key/value pairs
+        are joined with ’AND’ in the WHERE clause.  Returns a single row
+        as a hashref.
+
+       ssmmaarrttUUppddaattee(($$ttaabbllee,, \\%%kkeeyyss,, \\%%ddaattaa))
+
+       Same as _u_p_d_a_t_e_(_), except that a check is first made to see if there are
+       any rows matching the data in %keys.  If so, _u_p_d_a_t_e_(_) is called,
+       otherwise, _i_n_s_e_r_t_(_) is called.
+
+       nnaattiivveeSSeelleecctt(($$qquueerryy,, \\@@eexxeecc__aarrggss))
+
+       Executes the query in $query and returns a single row result (as a hash
+       ref).  If there are multiple rows in the result, the rest get silently
+       dropped.  @exec_args are the same arguments you would pass to an _e_x_e_-
+       _c_u_t_e_(_) called on a DBI object.  Returns undef on error.
+
+       nnaattiivveeSSeelleeccttEExxeeccLLoooopp(($$qquueerryy))
+
+        Like nativeSelect(), but returns a loop object that can be used
+        to execute the same query over and over with different bind
+        parameters.  This does a single DBI prepare() instead of a new
+        prepare() for select.
+
+        E.g.,
+
+            my $loop = $db->nativeSelectExecLoop("SELECT * FROM mytable WHERE id=?");
+            foreach my $id (@ids) {
+                my $row = $loop->next([ $id ]);
+            }
+
+       nnaattiivveeSSeelleeccttWWiitthhAArrrraayyRReeff(($$qquueerryy,, \\@@eexxeecc__aarrggss))
+
+        Like nativeSelect(), but return a reference to an array instead
+        of a hash.  Returns undef on error.  If there are no results
+        from the query, a reference to an empty array is returned.
+
+       nnaattiivveeSSeelleeccttMMuullttii(($$qquueerryy,, \\@@eexxeecc__aarrggss))
+
+        Executes the query in $query and returns an array of rows, where
+        each row is a hash representing a row of the result.  Returns
+        undef on error.  If there are no results for the query, an empty
+        array ref is returned.
+
+       nnaattiivveeSSeelleeccttMMuullttiiEExxeeccLLoooopp(($$qquueerryy))
+
+        Like nativeSelectExecLoop(), but returns an array of rows, where
+        each row is a hash representing a row of the result.
+
+       nnaattiivveeSSeelleeccttMMuullttiiWWiitthhAArrrraayyRReeff(($$qquueerryy,, \\@@eexxeecc__aarrggss))
+
+        Like nativeSelectMulti(), but return a reference to an array of
+        arrays instead of to an array of hashes.  Returns undef on error.
+
+       nnaattiivveeSSeelleeccttMMaappppiinngg(($$qquueerryy,, \\@@eexxeecc__aarrggss))
+
+        Executes the given query and returns a reference to a hash
+        containing the first and second columns of the results as
+        key/value pairs.
+
+       nnaattiivveeSSeelleeccttDDyynnaaMMaappppiinngg(($$qquueerryy,, \\@@ccoollss,, \\@@eexxeecc__aarrggss))
+
+        Similar to nativeSelectMapping() except you specify which
+        columns to use for the key/value pairs in the return hash.  If
+        the first element of @cols starts with a digit, then @cols is
+        assumed to contain indexes for the two columns you wish to use.
+        Otherwise, @cols is assumed to contain the field names for the
+        two columns you wish to use.
+
+        For example,
+
+            nativeSelectMapping($query, \@exec_args) is
+
+         equivalent (and in fact calls) to
+
+            nativeSelectDynaMapping($query, [ 0, 1 ], $exec_args).
+
+       nnaattiivveeSSeelleeccttRReeccoorrddMMaappppiinngg(($$qquueerryy,, \\@@eexxeecc__aarrggss))
+
+        Similar to nativeSelectMapping(), except the values in the hash
+        are references to the corresponding record (as a hash).
+
+       nnaattiivveeSSeelleeccttRReeccoorrddDDyynnaaMMaappppiinngg(($$qquueerryy,, $$ccooll,, \\@@eexxeecc__aarrggss))
+
+        Similar to nativeSelectRecordMapping(), except you specify
+        which column is the key in each key/value pair in the hash.  If
+        $col starts with a digit, then it is assumed to contain the
+        index for the column you wish to use.  Otherwise, $col is
+        assumed to contain the field name for the two columns you wish
+        to use.
+
+       nnaattiivveeSSeelleeccttVVaalluuee(($$qquueerryy,, \\@@eexxeecc__aarrggss))
+
+        Returns a single value, the first column from the first row of
+        the result.  Returns undef on error or if there are no rows in
+        the result.  Note this may be the same value returned for a NULL
+        value in the result.
+
+       aabbssttrraaccttSSeelleecctt(($$ttaabbllee,, \\@@ffiieellddss,, \\%%wwhheerree,, \\@@oorrddeerr))
+
+       Same as _n_a_t_i_v_e_S_e_l_e_c_t_(_) except uses SQL::Abstract to generate the SQL.
+       See the POD for SQL::Abstract for usage.  You must have SQL::Abstract
+       installed for this method to work.
+
+       aabbssttrraaccttSSeelleeccttMMuullttii(($$ttaabbllee,, \\@@ffiieellddss,, \\%%wwhheerree,, \\@@oorrddeerr))
+
+       Same as _n_a_t_i_v_e_S_e_l_e_c_t_M_u_l_t_i_(_) except uses SQL::Abstract to generate the
+       SQL.  See the POD for SQL::Abstract for usage.  You must have
+       SQL::Abstract installed for this method to work.
+
+       nnaattiivveeSSeelleeccttLLoooopp(($$qquueerryy,, @@eexxeecc__aarrggss))
+
+       Executes the query in $query, then returns an object that allows you to
+       loop through one result at a time, e.g.,
+
+           my $loop = $db->nativeSelectLoop("SELECT * FROM my_table");
+           while (my $row = $loop->next) {
+               my $id = $$row{id};
+           }
+
+           To get the number of rows selected, you can call the
+           rowCountCurrent() method on the loop object, e.g.,
+
+           my $loop = $db->nativeSelectLoop("SELECT * FROM my_table");
+           my $rows_in_result = $loop->rowCountCurrent;
+
+           The count() method is an alias for rowCountCurrent().
+
+           To get the number of rows returned by next() so far, use the
+           rowCountTotal() method.
+
+       nnaattiivveeQQuueerryy(($$qquueerryy,, @@eexxeecc__aarrggss))
+
+       Executes the query in $query and returns true if successful.  This is
+       typically used for deletes and is a catchall for anything the methods
+       provided by this module don’t take into account.
+
+       nnaattiivveeQQuueerryyLLoooopp(($$qquueerryy))
+
+       A loop on nativeQuery, where any placeholders you have put in your
+       query are bound each time you call _n_e_x_t_(_).  E.g.,
+
+           my $loop = $db->nativeQueryLoop("UPDATE my_table SET value=? WHERE id=?");
+           $loop->next([ ’one’, 1]);
+           $loop->next([ ’two’, 2]);
+
+       nneewwCCoommmmaanndd(($$ccmmdd))
+
+       This method is deprecated.  Use $db->command($cmd_str) instead.
+
+       This creates a literal SQL command for use in _i_n_s_e_r_t_(_), _u_p_d_a_t_e_(_), and
+       related methods, since if you simply put something like "_C_U_R___D_A_T_E_(_)" as
+       a value in the %data parameter passed to insert, the function will get
+       quoted, and so will not work as expected.  Instead, do something like
+       this:
+
+           my $data = { file => ’my_document.txt’,
+                        the_date => $db->newCommand(’CUR_DATE()’)
+                      };
+           $db->insert(’my_doc_table’, $data);
+
+       This can also be done by passing a reference to a string with the SQL
+       command, e.g.,
+
+           my $data = { file => ’my_document.txt’,
+                        the_date => \’CUR_DATE()’
+                      };
+           $db->insert(’my_doc_table’, $data);
+
+       ccoommmmaanndd(($$ccmmdd__ssttrriinngg))
+
+       This creates a literal SQL command for use in _i_n_s_e_r_t_(_), _u_p_d_a_t_e_(_), and
+       related methods, since if you simply put something like "_C_U_R___D_A_T_E_(_)" as
+       a value in the %data parameter passed to insert, the function will get
+       quoted, and so will not work as expected.  Instead, do something like
+       this:
+
+           my $data = { file => ’my_document.txt’,
+                        the_date => $db->command(’CUR_DATE()’)
+                      };
+           $db->insert(’my_doc_table’, $data);
+
+       This can also be done by passing a reference to a string with the SQL
+       command, e.g.,
+
+           my $data = { file => ’my_document.txt’,
+                        the_date => \’CUR_DATE()’
+                      };
+           $db->insert(’my_doc_table’, $data);
+
+       This is currently how _c_o_m_m_a_n_d_(_) is implemented.
+
+       ddeebbuuggOOnn((\\**FFIILLEE__HHAANNDDLLEE))
+
+       Turns on debugging output.  Debugging information will be printed to
+       the given filehandle.
+
+       _d_e_b_u_g_O_f_f_(_)
+
+       Turns off debugging output.
+
+       sseettNNaammeeAArrgg(($$aarrgg))
+
+       This is the argument to pass to the _f_e_t_c_h_r_o_w___h_a_s_h_r_e_f_(_) call on the
+       underlying DBI object.  By default, this is ’NAME_lc’, so that all
+       field names returned are all lowercase to provide for portable code.
+       If you want to make all the field names return be uppercase, call
+       $db->setNameArg(’NAME_uc’) after the _c_o_n_n_e_c_t_(_) call.  And if you really
+       want the case of the field names to be what the underlying database
+       driveer returns them as, call $db->setNameArg(’NAME’).
+
+       _e_r_r_(_)
+
+       Calls _e_r_r_(_) on the underlying DBI object, which returns the native
+       database engine error code from the last driver method called.
+
+       _c_o_m_m_i_t_(_)
+
+       Calls _c_o_m_m_i_t_(_) on the underlying DBI object to commit your transac-
+       tions.
+
+       _p_i_n_g_(_)
+
+       Calls _p_i_n_g_(_) on the underlying DBI object to see if the database con-
+       nection is still up.
+
+       _g_e_t_L_a_s_t_I_n_s_e_r_t_I_d_(_),, _g_e_t___l_a_s_t___i_n_s_e_r_t___i_d_(_),, _l_a_s_t___i_n_s_e_r_t___i_d_(_)
+
+        Returns the last_insert_id.  This is MySQL specific for now.  It
+        just runs the query "SELECT LAST_INSERT_ID()".
+
+       TThheerree aarree aallssoo uunnddeerrssccoorree__sseeppaarraatteedd vveerrssiioonnss ooff tthheessee mmeetthhooddss..
+
+           E.g., nativeSelectLoop() becomes native_select_loop()
+
+TTOODDOO
+       More logging/debugging options
+       Allow _p_r_e_p_a_r_e_(_) and _e_x_e_c_u_t_e_(_) for easier integration into existing
+       code.
+
+AACCKKNNOOWWLLEEDDGGEEMMEENNTTSS
+           People who have contributed ideas and/or code for this module:
+
+           Kevin Wilson
+           Mark Stosberg
+
+AAUUTTHHOORR
+           Don Owens <don@owensnet.com>
+
+CCOOPPYYRRIIGGHHTT
+           Copyright (c) 2003-2004 Don Owens
+
+           All rights reserved. This program is free software; you can
+           redistribute it and/or modify it under the same terms as Perl
+           itself.
+
+VVEERRSSIIOONN
+           0.12
+
+
+
+perl v5.8.1                       2004-07-20                  DBIx::Wrapper(3)
