@@ -1,5 +1,28 @@
+Version 0.14
+        * The data_source argument to connect() can now be a hash
+        * Unknown method calls will be passed to the underlying DBI
+          object.  So now you can make calls like prepare() which
+          makes it easier integrate DBIx::Wrapper into an existing
+          software package.
+
+Version 0.13 (tester release)
+        * Preliminary support for handlers (alpha)
+        * errstr() method
+        * Optional db_style parameter in the \%params parameter to the
+          connect() method.
+        * Check for db_style values mssql, sybase, asa, and asany to
+          determine how getLastInsertId() should be implemented.
+        * Check driver name in the dsn string passed to connect() to
+          determine how getLastInsertId() should be implemented.
+          Values checked are sybase and asany.  The default behaviour
+          is for the mysql driver.
+        * begin_work() method
+        * rollback() method
+
 Version 0.12
         * New optional parameter \%params in the connect() method
+        * Optional debug and error handlers accepted through the
+          \%params parameter in the connect() method.
         * command($str) method to return a scalar reference needed to
           pass to insert(), replace(), etc., to pass literal SQL.
 

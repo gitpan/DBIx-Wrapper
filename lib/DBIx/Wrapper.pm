@@ -2,9 +2,9 @@
 # Creation date: 2003-03-30 12:17:42
 # Authors: Don
 # Change log:
-# $Id: Wrapper.pm,v 1.35 2004/07/21 04:06:53 don Exp $
+# $Id: Wrapper.pm,v 1.50 2005/03/06 00:02:48 don Exp $
 #
-# Copyright (c) 2003-2004 Don Owens
+# Copyright (c) 2003-2005 Don Owens
 #
 # All rights reserved. This program is free software; you can
 # redistribute it and/or modify it under the same terms as Perl
@@ -100,7 +100,9 @@ DBIx::Wrapper - A wrapper around the DBI
 
 DBIx::Wrapper provides a wrapper around the DBI that makes it a
 bit easier on the programmer.  This module allows you to execute
-a query with a single method call.
+a query with a single method call as well as make inserts easier,
+etc.  It also supports running hooks at various stages of
+processing a query (see the section on Hooks).
 
 =head1 METHODS
 
@@ -114,23 +116,36 @@ use strict;
     
     use Carp ();
     
-    use vars qw($VERSION);
+    use vars qw($VERSION $AUTOLOAD $Heavy);
+    $Heavy = 0;
 
     BEGIN {
-        $VERSION = '0.12'; # update below in POD as well
+        $VERSION = '0.14'; # update below in POD as well
     }
 
     use DBI;
+    use DBIx::Wrapper::Request;
     use DBIx::Wrapper::SQLCommand;
     use DBIx::Wrapper::Statement;
     use DBIx::Wrapper::SelectLoop;
     use DBIx::Wrapper::SelectExecLoop;
     use DBIx::Wrapper::StatementLoop;
+    use DBIx::Wrapper::Delegator;
 
     sub _new {
         my ($proto) = @_;
         my $self = bless {}, ref($proto) || $proto;
         return $self;
+    }
+
+    sub import {
+        my $class = shift;
+
+        foreach my $e (@_) {
+            if ($e eq ':heavy') {
+                $Heavy = 1;
+            }
+        }
     }
 
 =pod
@@ -142,9 +157,14 @@ the same parameters you would pass to the connect call when using
 DBI directly.
 
 The %params hash is optional and contains extra parameters to
-control the behaviour of DBIx::Wrapper itself.  Currently the
-only valid entries are error_handler and debug_handler, the value
-of which should either be a reference to a subroutine, or a
+control the behaviour of DBIx::Wrapper itself.  Following are the
+valid parameters.
+
+=over 4
+
+=item error_handler and debug_handler
+
+These values should either be a reference to a subroutine, or a
 reference to an array whose first element is an object and whose
 second element is a method name to call on that object.  The
 parameters passed to the error_handler callback are the current
@@ -168,7 +188,28 @@ E.g.,
                                     debug_handler => \&do_debug,
                                   });
 
-=head2 new($data_source, $username, $auth, \%attr)
+
+=item db_style
+
+Used to control some database specific logic.  The default value
+is 'mysql'.  Currently, this is only used for the
+getLastInsertId() method.  MSSQL is supported with a value of
+mssql for this parameter.
+
+=item heavy
+
+If set to a true value, any hashes returned will actually be
+objects on which you can call methods to get the values back.  E.g.,
+
+  my $row = $db->nativeSelect($query);
+  my $id = $row->id;
+  or
+  my $id = $row->{id};
+
+=back
+
+
+=head2 new($data_source, $username, $auth, \%attr, \%params)
 
 An alias for connect().
 
@@ -177,7 +218,10 @@ An alias for connect().
         my ($proto, $data_source, $username, $auth, $attr, $params) = @_;
         my $self = $proto->_new;
 
-        my $dbh = DBI->connect($data_source, $username, $auth, $attr);
+        my $dsn = $data_source;
+        $dsn = $self->_getDsnFromHash($data_source) if ref($data_source) eq 'HASH';
+
+        my $dbh = DBI->connect($dsn, $username, $auth, $attr);
         unless (ref($attr) eq 'HASH' and defined($$attr{PrintError}) and not $$attr{PrintError}) {
             # FIXME: make a way to set debug level here
             # $self->addDebugLevel(2); # print on error
@@ -196,6 +240,7 @@ An alias for connect().
         
         $self->_setDatabaseHandle($dbh);
         $self->_setDataSource($data_source);
+        $self->_setDataSourceStr($dsn);
         $self->_setUsername($username);
         $self->_setAuth($auth);
         $self->_setAttr($attr);
@@ -203,11 +248,44 @@ An alias for connect().
 
         $self->_setErrorHandler($params->{error_handler}) if $params->{error_handler};
         $self->_setDebugHandler($params->{debug_handler}) if $params->{debug_handler};
+        $self->_setDbStyle($params->{db_style}) if exists($params->{db_style});
+        $self->_setHeavy(1) if $params->{heavy};
+        
+        my ($junk, $dbd_driver, @rest) = split /:/, $dsn;
+        $self->_setDbdDriver(lc($dbd_driver));
 
         return $self;
     }
 
     *new = \&connect;
+
+    sub reconnect {
+        my $self = shift;
+
+        my $dsn = $self->_getDataSourceStr;
+
+        my $dbh = DBI->connect($dsn, $self->_getUsername, $self->_getAuth,
+                               $self->_getAttr);
+        if ($dbh) {
+            $self->_setDatabaseHandle($dbh);
+            return $self;
+        } else {
+            return undef;
+        }
+    }
+
+    sub _getDsnFromHash {
+        my $self = shift;
+        my $data_source = shift;
+        my @dsn;
+        
+        push @dsn, "database=$$data_source{database}" if $data_source->{database};
+        push @dsn, "host=$$data_source{host}" if $data_source->{host};
+        push @dsn, "port=$$data_source{port}" if $data_source->{port};
+
+        my $driver = $data_source->{driver} || $data_source->{type};
+        return "dbi:$driver:" . join(';', @dsn);
+    }
 
     sub addDebugLevel {
         my ($self, $level) = @_;
@@ -274,28 +352,8 @@ Return the underlying DBI object used to query the database.
         my $fields = join(",", @fields);
         my $place_holders = join(",", @place_holders);
         my $query = qq{$operation INTO $table ($fields) values ($place_holders)};
-
-        $self->_printDebug($query);
-
-        my $dbh = $self->_getDatabaseHandle;
-        my $sth = $dbh->prepare($query);
-        unless ($sth) {
-            if ($self->_isDebugOn) {
-                $self->_printDebug(Carp::longmess($dbh->errstr) . "\nQuery was '$query'\n");
-            } else {
-                $self->_printDbiError("\nQuery was '$query'\n");
-            }
-            return $self->setErr(0, $dbh->errstr);
-        }
-        my $rv = $sth->execute(@values);
-        unless ($rv) {
-            if ($self->_isDebugOn) {
-                $self->_printDebug(Carp::longmess($dbh->errstr) . "\nQuery was '$query'\n");
-            } else {
-                $self->_printDbiError("\nQuery was '$query'\n");
-            }
-            return $self->setErr(1, $dbh->errstr);
-        }
+        my ($sth, $rv) = $self->_getStatementHandleForQuery($query, \@values);
+        return $sth unless $sth;
         $sth->finish;
         
         return $rv;
@@ -326,7 +384,13 @@ databases which support it.
 =cut
     sub replace {
         my ($self, $table, $data) = @_;
-        return $self->_insert_replace('REPLACE', $table, $data);
+        my $style = lc($self->_getDbStyle);
+        if ($style eq 'mssql') {
+            # mssql doesn't support replace, so do an insert instead
+            return $self->_insert_replace('INSERT', $table, $data);
+        } else {
+            return $self->_insert_replace('REPLACE', $table, $data);
+        }
     }
 
 =pod
@@ -586,6 +650,153 @@ is called, otherwise, insert() is called.
     }
     *smart_update = \&smartUpdate;
 
+    sub _runHandler {
+        my ($self, $handler_info, @args) = @_;
+        return undef unless ref($handler_info);
+
+        my ($handler, $custom_args) = @$handler_info;
+        $custom_args = [] unless $custom_args;
+        
+        unshift @args, $self;
+        if (ref($handler) eq 'ARRAY') {
+            my $method = $handler->[1];
+            $handler->[0]->$method(@args, @$custom_args);
+        } else {
+            $handler->(@args, @$custom_args);
+        }
+
+        return 1;
+    }
+
+    sub _runHandlers {
+        my ($self, $handlers, $r) = @_;
+        return undef unless $handlers;
+
+        my $rv = $r->OK;
+        foreach my $handler_info (reverse @$handlers) {
+            my ($handler, $custom_args) = @$handler_info;
+            $custom_args = [] unless $custom_args;
+            
+            if (ref($handler) eq 'ARRAY') {
+                my $method = $handler->[1];
+                $rv = $handler->[0]->$method($r);
+            } else {
+                $rv = $handler->($r);
+            }
+            last unless $rv == $r->DECLINED;
+        }
+
+        return $rv;
+    }
+
+
+
+    sub _defaultPrePrepareHandler {
+        my $r = shift;
+        return $r->OK;
+    }
+
+    sub _defaultPostPrepareHandler {
+        my $r = shift;
+        return $r->OK;
+    }
+
+    sub _defaultPreExecHandler {
+        my $r = shift;
+        return $r->OK;
+    }
+
+    sub _defaultPostExecHandler {
+        my $r = shift;
+        return $r->OK;
+    }
+
+    sub _defaultPreFetchHandler {
+        my $r = shift;
+        return $r->OK;
+    }
+    
+    sub _defaultPostFetchHandler {
+        my $r = shift;
+        return $r->OK;
+    }
+
+    sub _runGenericHook {
+        my ($self, $r, $default_handler, $custom_handler_field) = @_;
+        my $handlers = [ $default_handler ];
+        
+        if ($self->shouldBeHeavy) {
+            if ($custom_handler_field eq '_post_fetch_hooks') {
+                push @$handlers, [ \&_heavyPostFetchHook ];
+            }
+        }
+        
+        my $custom_handlers = $self->{$custom_handler_field};
+        push @$handlers, @$custom_handlers if $custom_handlers;
+
+        return $self->_runHandlers($handlers, $r);
+    }
+
+    sub _runPrePrepareHook {
+        my $self = shift;
+        my $r = shift;
+        my $handlers = [ [ \&_defaultPrePrepareHandler ] ];
+        my $custom_handlers = $self->{_pre_prepare_hooks};
+        push @$handlers, @$custom_handlers if $custom_handlers;
+                
+        return $self->_runHandlers($handlers, $r);
+    }
+
+    sub _runPostPrepareHook {
+        my $self = shift;
+        my $r = shift;
+        my $handlers = [ [ \&_defaultPostPrepareHandler ] ];
+        my $custom_handlers = $self->{_post_prepare_hooks};
+        push @$handlers, @$custom_handlers if $custom_handlers;
+                
+        return $self->_runHandlers($handlers, $r);
+    }
+
+    sub _runPreExecHook {
+        my $self = shift;
+        my $r = shift;
+        my $handlers = [ [ \&_defaultPreExecHandler ] ];
+        my $custom_handlers = $self->{_pre_exec_hooks};
+        push @$handlers, @$custom_handlers if $custom_handlers;
+                
+        return $self->_runHandlers($handlers, $r);
+    }
+
+    sub _runPostExecHook {
+        my $self = shift;
+        my $r = shift;
+        return $self->_runGenericHook($r, [ \&_defaultPostExecHandler ], '_post_exec_hooks');
+    }
+
+    sub _runPreFetchHook {
+        my $self = shift;
+        my $r = shift;
+        return $self->_runGenericHook($r, [ \&_defaultPreFetchHandler ], '_pre_fetch_hooks');
+    }
+
+    sub _runPostFetchHook {
+        my $self = shift;
+        my $r = shift;
+        return $self->_runGenericHook($r, [ \&_defaultPostFetchHandler ],
+                                         '_post_fetch_hooks');
+    }
+
+    sub _heavyPostFetchHook {
+        my $r = shift;
+        my $row = $r->getReturnVal;
+
+        if (ref($row) eq 'HASH') {
+            $r->setReturnVal(bless($row, 'DBIx::Wrapper::Delegator'));
+        } elsif (ref($row) eq 'ARRAY') {
+            # do nothing for now
+        }
+    }
+
     sub _getStatementHandleForQuery {
         my ($self, $query, $exec_args) = @_;
         
@@ -596,8 +807,21 @@ is called, otherwise, insert() is called.
 
         $self->_printDebug($query);
 
+        my $r = DBIx::Wrapper::Request->new($self);
+        $r->setQuery($query);
+        $r->setExecArgs($exec_args);
+        
+        $self->_runPrePrepareHook($r);
+        $query = $r->getQuery;
+        $exec_args = $r->getExecArgs;
+        
         my $dbh = $self->_getDatabaseHandle;
         my $sth = $dbh->prepare($query);
+
+        $r->setStatementHandle($sth);
+        $r->setErrorStr($sth ? $dbh->errstr : '');
+        $self->_runPostPrepareHook($r);
+        
         unless ($sth) {
             if ($self->_isDebugOn) {
                 $self->_printDebug(Carp::longmess($dbh->errstr) . "\nQuery was '$query'\n");
@@ -608,7 +832,21 @@ is called, otherwise, insert() is called.
                 : $self->setErr(0, $dbh->errstr);
         }
 
+        $r->setQuery($query);
+        $r->setExecArgs($exec_args);
+
+        $self->_runPreExecHook($r);
+
+        $exec_args = $r->getExecArgs;
+        
         my $rv = $sth->execute(@$exec_args);
+        
+        $r->setExecReturnValue($rv);
+        $r->setErrorStr($rv ? '' : $dbh->errstr);
+        $self->_runPostExecHook($r);
+        $rv = $r->getExecReturnValue;
+        $sth = $r->getStatementHandle;
+        
         unless ($rv) {
             if ($self->_isDebugOn) {
                 $self->_printDebug(Carp::longmess($dbh->errstr) . "\nQuery was '$query'\n");
@@ -619,8 +857,20 @@ is called, otherwise, insert() is called.
                 : $self->setErr(1, $dbh->errstr);
         }
 
-        return wantarray ? ($sth, $rv) : $sth;
+        return wantarray ? ($sth, $rv, $r) : $sth;
     }
+
+    sub prepare_no_hooks {
+        my $self = shift;
+        my $query = shift;
+
+        my $dbi_obj = $self->getDBI;
+        my $sth = $dbi_obj->prepare($query);
+
+        return $sth;
+    }
+    *prepare_no_handlers = \&prepare_no_hooks;
+
 
 =pod
 
@@ -636,16 +886,24 @@ on error.
     sub nativeSelect {
         my ($self, $query, $exec_args) = @_;
 
-        my $sth;
+        my ($sth, $rv, $r);
         if (scalar(@_) == 3) {
-            $sth = $self->_getStatementHandleForQuery($query, $exec_args);
+            ($sth, $rv, $r) = $self->_getStatementHandleForQuery($query, $exec_args);
         } else {
-            $sth = $self->_getStatementHandleForQuery($query);
+            ($sth, $rv, $r) = $self->_getStatementHandleForQuery($query);
         }
         
         return $sth unless $sth;
+
+        $self->_runPreFetchHook($r);
+        $sth = $r->getStatementHandle;
         
         my $result = $sth->fetchrow_hashref($self->getNameArg);
+        
+        $r->setReturnVal($result);
+        $self->_runPostFetchHook($r);
+        $result = $r->getReturnVal;
+        
         $sth->finish;
 
         return $result; 
@@ -690,16 +948,25 @@ on error.
     sub nativeSelectWithArrayRef {
         my ($self, $query, $exec_args) = @_;
 
-        my $sth;
+        my ($sth, $rv, $r);
         if (scalar(@_) == 3) {
-            $sth = $self->_getStatementHandleForQuery($query, $exec_args);
+            ($sth, $rv, $r) = $self->_getStatementHandleForQuery($query, $exec_args);
         } else {
-            $sth = $self->_getStatementHandleForQuery($query);
+            ($sth, $rv, $r) = $self->_getStatementHandleForQuery($query);
         }
         
         return $sth unless $sth;
-        
+
+        $self->_runPreFetchHook($r);
+        $sth = $r->getStatementHandle;
+
         my $result = $sth->fetchrow_arrayref;
+
+        $r->setReturnVal($result);
+        $self->_runPostFetchHook($r);
+
+        $result = $r->getReturnVal;
+
         $sth->finish;
 
         return [] unless $result and ref($result) =~ /ARRAY/;
@@ -723,17 +990,30 @@ on error.
     sub nativeSelectMulti {
         my ($self, $query, $exec_args) = @_;
 
-        my $sth;
+        my ($sth, $rv, $r);
         if (scalar(@_) == 3) {
-            $sth = $self->_getStatementHandleForQuery($query, $exec_args);
+            ($sth, $rv, $r) = $self->_getStatementHandleForQuery($query, $exec_args);
         } else {
-            $sth = $self->_getStatementHandleForQuery($query);
+            ($sth, $rv, $r) = $self->_getStatementHandleForQuery($query);
         }
         return $sth unless $sth;
-        
+
+        $self->_runPreFetchHook($r);
+        $sth = $r->getStatementHandle;
+
         my $rows = [];
-        while (my $row = $sth->fetchrow_hashref($self->getNameArg)) {
+        my $row = $sth->fetchrow_hashref($self->getNameArg);
+        while ($row) {
+            $r->setReturnVal($row);
+            $self->_runPostFetchHook($r);
+
+            $row = $r->getReturnVal;
             push @$rows, $row;
+            
+            $self->_runPreFetchHook($r);
+            $sth = $r->getStatementHandle;
+
+            $row = $sth->fetchrow_hashref($self->getNameArg)
         }
         my $col_names = $sth->{$self->getNameArg};
         $$self{_last_col_names} = $col_names;
@@ -766,26 +1046,34 @@ on error.
  Like nativeSelectMulti(), but return a reference to an array of
  arrays instead of to an array of hashes.  Returns undef on error.
 
-=cut
-    
+=cut    
     sub nativeSelectMultiWithArrayRef {
         my ($self, $query, $exec_args) = @_;
 
-        my $sth;
+        my ($sth, $rv, $r);
         if (scalar(@_) == 3) {
-            $sth = $self->_getStatementHandleForQuery($query, $exec_args);
+            ($sth, $rv, $r) = $self->_getStatementHandleForQuery($query, $exec_args);
         } else {
-            $sth = $self->_getStatementHandleForQuery($query);
+            ($sth, $rv, $r) = $self->_getStatementHandleForQuery($query);
         }
         
         return $sth unless $sth;
-        
+
+        $self->_runPreFetchHook($r);
+        $sth = $r->getStatementHandle;
+
         my $list = [];
-       
-        while (my $result = $sth->fetchrow_arrayref()) {
+
+        my $result = $sth->fetchrow_arrayref;
+        while ($result) {
+            $r->setReturnVal($result);
+            $self->_runPostFetchHook($r);
+            $result = $r->getReturnVal;
+            
             # have to make copy because recent version of DBI now
             # return the same array reference each time
             push @$list, [ @$result ];
+            $result = $sth->fetchrow_arrayref;
         }
         $sth->finish;
 
@@ -988,8 +1276,8 @@ SQL::Abstract installed for this method to work.
 
 =head2 abstractSelectMulti($table, \@fields, \%where, \@order)
 
-Same as nativeSelectMulti() except uses SQL::Abstract to generate the
-SQL.  See the POD for SQL::Abstract for usage.  You must have
+Same as nativeSelectMulti() except uses SQL::Abstract to generate
+the SQL.  See the POD for SQL::Abstract for usage.  You must have
 SQL::Abstract installed for this method to work.
 
 =cut
@@ -1059,12 +1347,11 @@ the methods provided by this module don't take into account.
     sub nativeQuery {
         my ($self, $query, $exec_args) = @_;
 
-        my $sth;
-        my $rv;
+        my ($sth, $rv, $r);
         if (scalar(@_) == 3) {
-            ($sth, $rv) = $self->_getStatementHandleForQuery($query, $exec_args);
+            ($sth, $rv, $r) = $self->_getStatementHandleForQuery($query, $exec_args);
         } else {
-            ($sth, $rv) = $self->_getStatementHandleForQuery($query);
+            ($sth, $rv, $r) = $self->_getStatementHandleForQuery($query);
         }
         return $sth unless $sth;
         return $rv;
@@ -1413,6 +1700,21 @@ called.
         return $dbh->err if $dbh;
         return 0;
     }
+
+=pod
+
+=head2 errstr()
+
+Calls errstr() on the underlying DBI object, which returns the
+native database engine error message from the last driver method
+called.
+
+=cut
+    sub errstr {
+        my $self = shift;
+        my $dbh = $self->_getDatabaseHandle;
+        return $dbh ? $dbh->errstr : undef;
+    }
     
     sub _getAttr {
         my ($self) = @_;
@@ -1430,8 +1732,8 @@ called.
     }
 
     sub _setAuth {
-        my ($self, $auth) = @_;
-        return $$self{_auth};
+        my $self = shift;
+        $self->{_auth} = shift;
     }
 
     sub _getUsername {
@@ -1452,6 +1754,20 @@ called.
     sub _setDatabaseHandle {
         my ($self, $dbh) = @_;
         $$self{_dbh} = $dbh;
+    }
+
+    sub getDataSourceAsString {
+        return shift()->_getDataSourceStr;
+    }
+
+    sub _getDataSourceStr {
+        my $self = shift;
+        return $self->{_data_source_str};
+    }
+
+    sub _setDataSourceStr {
+        my $self = shift;
+        $self->{_data_source_str} = shift;
     }
 
     sub _getDataSource {
@@ -1487,6 +1803,24 @@ called.
         return shift()->{_debug_handler};
     }
 
+    sub _setDbStyle {
+        my ($self, $style) = @_;
+        $$self{_db_style} = $style;
+    }
+
+    sub _getDbStyle {
+        return shift()->{_db_style};
+    }
+
+    sub _setDbdDriver {
+        my $self = shift;
+        $self->{_dbd_driver} = shift;
+    }
+
+    sub _getDbdDriver {
+        return shift()->{_dbd_driver};
+    }
+
     # whether or not to disconnect when the Wrapper object is
     # DESTROYed
     sub _setDisconnect {
@@ -1494,12 +1828,170 @@ called.
         $$self{_should_disconnect} = 1;
     }
 
+    sub _setHeavy {
+        my $self = shift;
+        $self->{_heavy} = shift;
+    }
+
+    sub _getHeavy {
+        my $self = shift;
+        return $self->{_heavy};
+    }
+
+    sub shouldBeHeavy {
+        my $self = shift;
+        return 1 if $Heavy or $self->_getHeavy;
+        return undef;
+    }
+
+    sub get_info {
+        my ($self, $name) = @_;
+        require DBI::Const::GetInfoType;
+        my $dbh = $self->_getDatabaseHandle;
+        return $dbh->get_info($DBI::Const::GetInfoType::GetInfoType{$name});
+    }
+
 =pod
 
-=head2 commit()
+=head2 DBI methods
 
-Calls commit() on the underlying DBI object to commit your
-transactions.
+ The following method calls are just passed through to the
+ underlying DBI object for convenience.  See the documentation
+ for DBI for details.
+
+=over 4
+
+=item prepare
+
+ This method may call hooks in the future.  Use
+ prepare_no_hooks() if you want to ensure that it will be a
+ simple DBI call.
+
+=back
+
+=cut
+    sub prepare {
+        my $self = shift;
+        my $query = shift;
+
+        my $dbi_obj = $self->getDBI;
+        my $sth = $dbi_obj->prepare($query);
+
+        return $sth;
+    }
+
+=pod
+
+=over 4
+
+=item selectrow_arrayref
+
+=back
+
+=cut
+    sub selectrow_arrayref {
+        my $self = shift;
+        my $dbh = $self->_getDatabaseHandle;
+        return $dbh->selectrow_arrayref(@_);
+    }
+
+=pod
+
+=over 4
+
+=item selectrow_hashref
+
+=back
+
+=cut
+    sub selectrow_hashref {
+        my $self = shift;
+        my $dbh = $self->_getDatabaseHandle;
+        return $dbh->selectrow_hashref(@_);
+    }
+
+=pod
+
+=over 4
+
+=item selectall_arrayref
+
+=back
+
+=cut
+    sub selectall_arrayref {
+        my ($self, @args) = @_;
+        my $dbh = $self->_getDatabaseHandle;
+        return $dbh->selectall_arrayref(@args);
+    }
+
+=pod
+
+=over 4
+
+=item selectall_hashref
+
+=back
+
+=cut
+    sub selectall_hashref {
+        my ($self, @args) = @_;
+        my $dbh = $self->_getDatabaseHandle;
+        return $dbh->selectall_hashref(@args);
+    }
+
+=pod
+
+=over 4
+
+=item selectcol_arrayref
+
+=back
+
+=cut
+    sub selectcol_arrayref {
+        my ($self, @args) = @_;
+        my $dbh = $self->_getDatabaseHandle;
+        return $dbh->selectcol_arrayref(@args);
+    }
+
+=pod
+
+=over 4
+
+=item do
+
+=back
+
+=cut
+    sub do {
+        my ($self, @args) = @_;
+        my $dbh = $self->_getDatabaseHandle;
+        return $dbh->do(@args);
+    }
+
+=pod
+
+=over 4
+
+=item quote
+
+=back
+
+=cut
+    sub quote {
+        my ($self, @args) = @_;
+        my $dbh = $self->_getDatabaseHandle;
+        return $dbh->quote(@args);
+    }
+
+=pod
+
+=over 4
+
+=item commit
+
+=back
 
 =cut
     sub commit {
@@ -1513,10 +2005,45 @@ transactions.
 
 =pod
 
-=head2 ping()
+=over 4
 
-Calls ping() on the underlying DBI object to see if the database
-connection is still up.
+=item begin_work
+
+=back
+
+=cut
+    sub begin_work {
+        my $self = shift;
+        my $dbh = $self->_getDatabaseHandle;
+        if ($dbh) {
+            return $dbh->begin_work;
+        }
+        return undef;        
+    }
+
+=pod
+
+=over 4
+
+=item rollback
+
+=back
+
+=cut
+    sub rollback {
+        my $self = shift;
+        my $dbh = $self->_getDatabaseHandle;
+        if ($dbh) {
+            return $dbh->rollback;
+        }
+        return undef;        
+    }
+
+=pod
+
+=over 4
+
+=item ping
 
 =cut
     sub ping {
@@ -1550,8 +2077,11 @@ connection is still up.
 
 =head2 getLastInsertId(), get_last_insert_id(), last_insert_id()
 
- Returns the last_insert_id.  This is MySQL specific for now.  It
- just runs the query "SELECT LAST_INSERT_ID()".
+ Returns the last_insert_id.  The default is to be MySQL
+ specific.  It just runs the query "SELECT LAST_INSERT_ID()".
+ However, it will also work with MSSQL with the right parameters
+ (see the db_style parameter in the section explaining the
+ connect() method).
 
 =cut
     sub getLastInsertId {
@@ -1560,17 +2090,171 @@ connection is still up.
             my $dbh = $self->_getDatabaseHandle;
             return $dbh->last_insert_id($catalog, $schema, $table, $field, $attr);
         } else {
-            my $query = qq{SELECT LAST_INSERT_ID()};
+            my $query;
+            my $db_style = $self->_getDbStyle;
+            my $dbd_driver = $self->_getDbdDriver;
+            if (defined($db_style) and $db_style ne '') {
+                $db_style = lc($db_style);
+                if ($db_style eq 'mssql' or $db_style eq 'sybase' or $db_style eq 'asa'
+                   or $db_style eq 'asany') {
+                    $query = q{select @@IDENTITY};
+                } elsif ($db_style eq 'mysql') {
+                    $query = qq{SELECT LAST_INSERT_ID()};
+                } else {
+                    $query = qq{SELECT LAST_INSERT_ID()};
+                }
+            } elsif (defined($dbd_driver) and $dbd_driver ne '') {
+                if ($dbd_driver eq 'sybase' or $dbd_driver eq 'asany') {
+                    $query = q{SELECT @@IDENTITY};
+                } else {
+                    $query = qq{SELECT LAST_INSERT_ID()};
+                }
+            } else {
+                $query = qq{SELECT LAST_INSERT_ID()};
+            }
+            
             my $row = $self->nativeSelectWithArrayRef($query);
             if ($row and @$row) {
                 return $$row[0];
             }
+
             return undef;
         }
     }
     *get_last_insert_id = \&getLastInsertId;
     *last_insert_id = \&getLastInsertId;
 
+=pod
+
+=head2 Hooks
+
+DBIx::Wrapper supports hooks that get called just before and just
+after various query operations.  The add*Hook methods take a
+single argument that is either a code reference (e.g., anonymous
+subroutine reference), or an array whose first element is an
+object and whose second element is the name of a method to call
+on that object.
+
+The hooks will be called with a request object as the first
+argument.  See DBIx::Wrapper::Request.
+
+The two expected return values are $request->OK and
+$request->DECLINED.  The first tells DBIx::Wrapper that the
+current hook has done everything that needs to be done and
+doesn't call any other hooks in the stack for the current
+request.  DECLINED tells DBIx::Wrapper to continue down the
+hook stack as if the current handler was never invoked.
+
+See DBIx::Wrapper::Request for example hooks.
+
+=cut
+
+=pod
+
+=head3 addPrePrepareHook($hook)
+
+Specifies a hook to be called just before any SQL statement is
+prepare()'d.
+
+=cut
+    sub addPrePrepareHook {
+        my $self = shift;
+        my $handler = shift;
+        push @{$self->{_pre_prepare_hooks}}, [ $handler ];
+    }
+    *add_pre_prepare_handler = \&addPrePrepareHook;
+    *addPrePrepareHandler = \&addPrePrepareHook;
+    *add_pre_prepare_hook = \&addPrePrepareHook;
+
+=pod
+
+=head3 addPostPrepareHook($hook)
+
+Specifies a hook to be called just after any SQL statement is
+prepare()'d.
+
+=cut
+    sub addPostPrepareHook {
+        my $self = shift;
+        my $handler = shift;
+        push @{$self->{_post_prepare_hooks}}, [ $handler ];
+    }
+    *add_post_prepare_hook = \&addPostPrepareHook;
+
+=pod
+
+=head3 addPreExecHook($hook)
+
+Specifies a hook to be called just before any SQL statement is
+execute()'d.
+
+=cut
+    sub addPreExecHook {
+        my $self = shift;
+        my $handler = shift;
+        push @{$self->{_pre_exec_hooks}}, [ $handler ];
+    }
+    *add_pre_exec_hook = \&addPreExecHook;
+
+=pod
+
+=head3 addPostExecHook($hook)
+
+Adds a hook to be called just after a statement is execute()'d.
+
+=cut
+    sub addPostExecHook {
+        my $self = shift;
+        my $handler = shift;
+        push @{$self->{_post_exec_hooks}}, [ $handler ];
+    }
+    *add_post_exec_handler = \&addPostExecHook;
+    *addPostExecHandler = \&addPostExecHook;
+    *add_post_exec_hook = \&addPostExecHook;
+
+=pod
+
+=head3 addPreFetchHook($hook)
+
+Adds a hook to be called just before data is fetch()'d from the server.
+
+=cut
+    sub addPreFetchHook {
+        my $self = shift;
+        my $handler = shift;
+        push @{$self->{_pre_fetch_hooks}}, [ $handler ];
+    }
+    *add_pre_fetch_hook = \&addPreFetchHook;
+    *addPreFetchHandler = \&addPreFetchHook;
+
+=pod
+
+=head3 addPostFetchHook($hook)
+
+Adds a hook to be called just after data is fetch()'d from the server.
+
+=cut
+    sub addPostFetchHook {
+        my $self = shift;
+        my $handler = shift;
+        push @{$self->{_post_fetch_hooks}}, [ $handler ];
+    }
+    *addPostFetchHandler = \&addPostFetchHook;
+    
+    sub AUTOLOAD {
+        my $self = shift;
+
+        (my $func = $AUTOLOAD) =~ s/^.*::([^:]+)$/$1/;
+        
+        no strict 'refs';
+
+        if (ref($self)) {
+            my $dbh = $self->_getDatabaseHandle;
+            return $dbh->$func(@_);
+        } else {
+            return DBI->$func(@_);
+        }
+    }
 }
 
 1;
@@ -1584,19 +2268,9 @@ __END__
     E.g., nativeSelectLoop() becomes native_select_loop()
 
 
-=head1 TODO
-
-=over 4
-
-=item More logging/debugging options
-
-=item Allow prepare() and execute() for easier integration into existing code.
-
-=back
-
 =head1 ACKNOWLEDGEMENTS
 
-    People who have contributed ideas and/or code for this module:
+    Others who have contributed ideas and/or code for this module:
 
     Kevin Wilson
     Mark Stosberg
@@ -1607,7 +2281,7 @@ __END__
 
 =head1 COPYRIGHT
 
-    Copyright (c) 2003-2004 Don Owens
+    Copyright (c) 2003-2005 Don Owens
 
     All rights reserved. This program is free software; you can
     redistribute it and/or modify it under the same terms as Perl
@@ -1615,6 +2289,6 @@ __END__
 
 =head1 VERSION
 
-    0.12
+    0.14
 
 =cut
