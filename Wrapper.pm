@@ -2,7 +2,7 @@
 # Creation date: 2003-03-30 12:17:42
 # Authors: Don
 # Change log:
-# $Id: Wrapper.pm,v 1.8 2003/04/02 15:39:17 don Exp $
+# $Id: Wrapper.pm,v 1.11 2003/04/04 06:30:24 don Exp $
 #
 # All rights reserved. This program is free software; you can
 # redistribute it and/or modify it under the same terms as Perl
@@ -37,7 +37,7 @@ use strict;
     use vars qw($VERSION);
 
     BEGIN {
-        $VERSION = 0.02; # update below in POD as well
+        $VERSION = 0.03; # update below in POD as well
     }
 
     use DBI;
@@ -76,11 +76,43 @@ An alias for connect().
         $self->_setUsername($username);
         $self->_setAuth($auth);
         $self->_setAttr($attr);
+        $self->_setDisconnect(1);
 
         return $self;
     }
 
     *new = \&connect;
+
+=pod
+
+=head2 newFromDBI($dbh)
+
+Returns a new DBIx::Wrapper object from a DBI object that has
+already been created.  Note that when created this way,
+disconnect() will not be called automatically on the underlying
+DBI object when the DBIx::Wrapper object goes out of scope.
+
+=cut
+    sub newFromDBI {
+        my ($proto, $dbh) = @_;
+        my $self = $proto->_new;
+        $self->_setDatabaseHandle($dbh);
+        return $self;
+    }
+    *new_from_dbi = \&newFromDBI;
+
+=pod
+
+=head2 getDBI()
+
+Return the underlying DBI object used to query the database.
+
+=cut
+    sub getDBI {
+        my ($self) = @_;
+        return $self->_getDatabaseHandle;
+    }
+    *get_dbi = \&getDBI;
 
     sub _insert_replace {
         my ($self, $operation, $table, $data) = @_;
@@ -104,6 +136,8 @@ An alias for connect().
         my $fields = join(",", @fields);
         my $place_holders = join(",", @place_holders);
         my $query = qq{$operation INTO $table ($fields) values ($place_holders)};
+
+        $self->_printDebug($query);
 
         my $sth = $self->_getDatabaseHandle()->prepare($query)
             or return $self->setErr(0, $DBI::errstr);
@@ -176,6 +210,9 @@ the row(s) in the database.
         my $where = join(" AND ", map { "$_=?" } @keys);
 
         my $query = qq{UPDATE $table SET $set WHERE $where};
+
+        $self->_printDebug($query);
+
         my $sth = $self->_getDatabaseHandle()->prepare($query)
             or return $self->setErr(0, $DBI::errstr);
         my $rv = $sth->execute(@values)
@@ -234,6 +271,8 @@ execute() called on a DBI object.
         }
         $exec_args = [] unless $exec_args;
 
+        $self->_printDebug($query);
+
         my $sth = $self->_getDatabaseHandle()->prepare($query)
             or return $self->setErr(0, $DBI::errstr);
         my $rv = $sth->execute(@$exec_args)
@@ -262,6 +301,8 @@ each row is a hash representing a row of the result.
             $exec_args = [ $exec_args ] unless ref($exec_args);
         }
         $exec_args = [] unless $exec_args;
+
+        $self->_printDebug($query);
 
         my $sth = $self->_getDatabaseHandle()->prepare($query)
             or return $self->setErr(0, $DBI::errstr);
@@ -294,6 +335,8 @@ you to loop through one result at a time, e.g.,
 =cut
     sub nativeSelectLoop {
         my ($self, $query, $exec_args) = @_;
+        $self->_printDebug($query);
+
         return DBIx::Wrapper::SelectLoop->new($self, $query, $exec_args);
     }
 
@@ -316,6 +359,8 @@ the methods provided by this module don't take into account.
             $exec_args = [ $exec_args ] unless ref($exec_args);
         }
         $exec_args = [] unless $exec_args;
+
+        $self->_printDebug($query);
 
         my $sth = $self->_getDatabaseHandle()->prepare($query)
             or return $self->setErr(0, $DBI::errstr);
@@ -343,6 +388,8 @@ your query are bound each time you call next().  E.g.,
 =cut
     sub nativeQueryLoop {
         my ($self, $query) = @_;
+        $self->_printDebug($query);
+
         return DBIx::Wrapper::StatementLoop->new($self, $query);
     }
     *native_query_loop = \&nativeQueryLoop;
@@ -369,6 +416,88 @@ Instead, do something like this:
     }
     *new_command = \&newCommand;
 
+=pod
+
+=head2 debugOn(\*FILE_HANDLE)
+
+Turns on debugging output.  Debugging information will be printed
+to the given filehandle.
+
+=cut
+    # expects a reference to a filehandle to print debug info to
+    sub debugOn {
+        my ($self, $fh) = @_;
+        $$self{_debug} = 1;
+        $$self{_debug_fh} = $fh;
+
+        return 1;
+    }
+    *debug_on = \&debugOn;
+
+=pod
+
+=head2 debugOff()
+
+Turns off debugging output.
+
+=cut
+    sub debugOff {
+        my ($self) = @_;
+        undef $$self{_debug};
+        undef $$self{_debug_fh};
+
+        return 1;
+    }
+    *debug_off = \&debugOff;
+
+    sub _printDebug {
+        my ($self, $str) = @_;
+        unless ($$self{_debug} and $$self{_debug_fh}) {
+            return undef;
+        }
+
+        my $fh = $$self{_debug_fh};
+        
+        my $time = $self->_getCurDateTime;
+
+        my ($package, $filename, $line, $subroutine, $hasargs,
+            $wantarray, $evaltext, $is_require, $hints, $bitmask);
+
+        my $frame = 1;
+        my $this_pkg = __PACKAGE__;
+
+        ($package, $filename, $line, $subroutine, $hasargs,
+         $wantarray, $evaltext, $is_require, $hints, $bitmask) = caller($frame);
+        while ($package eq $this_pkg) {
+            $frame++;
+            ($package, $filename, $line, $subroutine, $hasargs,
+             $wantarray, $evaltext, $is_require, $hints, $bitmask) = caller($frame);
+
+            # if we get more than 10 something must be wrong
+            last if $frame >= 10;
+        }
+
+        my @one_more = caller($frame + 1);
+        $subroutine = $one_more[3];
+        $subroutine .= '()' unless $subroutine eq '';
+        
+        print $fh '*' x 60, "\n", "$time:$filename:$line:$subroutine\n", $str, "\n";
+    }
+
+    sub _getCurDateTime {
+        my ($self) = @_;
+        
+        my $time = time();
+        my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime($time);
+        $mon += 1;
+        $year += 1900;
+        my $date = sprintf "%04d-%02d-%02d %02d:%02d:%02d", $year, $mon, $mday,
+            $hour, $min, $sec;
+        
+        return $date;
+    }
+
+    
     sub escapeString {
         my ($self, $value) = @_;
         
@@ -388,6 +517,7 @@ Instead, do something like this:
 
     sub DESTROY {
         my ($self) = @_;
+        return undef unless $self->_getDisconnect;
         my $dbh = $self->_getDatabaseHandle;
         $dbh->disconnect if $dbh;
     }
@@ -489,6 +619,17 @@ $db->setNameArg('NAME').
         $$self{_data_source} = $data_source;
     }
 
+    sub _getDisconnect {
+        my ($self) = @_;
+        return $$self{_should_disconnect};
+    }
+
+    # whether or not to disconnect when the Wrapper object is
+    # DESTROYed
+    sub _setDisconnect {
+        my ($self, $val) = @_;
+        $$self{_should_disconnect} = 1;
+    }
 
 }
 
@@ -503,8 +644,6 @@ __END__
     E.g., nativeSelectLoop() becomes native_select_loop()
 
 
-=head1 EXAMPLES
-
 =head1 TODO
 
 =over 4
@@ -516,9 +655,6 @@ __END__
 =item Allow prepare() and execute()
 
 =back
-
-=head1 BUGS
-
 
 =head1 AUTHOR
 
@@ -534,6 +670,6 @@ __END__
 
 =head1 VERSION
 
-    0.02
+    0.03
 
 =cut

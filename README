@@ -19,6 +19,15 @@ METHODS
   new($data_source, $username, $auth, \%attr)
     An alias for connect().
 
+  newFromDBI($dbh)
+    Returns a new DBIx::Wrapper object from a DBI object that has already
+    been created. Note that when created this way, disconnect() will not be
+    called automatically on the underlying DBI object when the DBIx::Wrapper
+    object goes out of scope.
+
+  getDBI()
+    Return the underlying DBI object used to query the database.
+
   insert($table, \%data)
     Insert the provided row into the database. $table is the name of the
     table you want to insert into. %data is the data you want to insert -- a
@@ -83,6 +92,13 @@ METHODS
                    };
         $db->insert('my_doc_table', $data);
 
+  debugOn(\*FILE_HANDLE)
+    Turns on debugging output. Debugging information will be printed to the
+    given filehandle.
+
+  debugOff()
+    Turns off debugging output.
+
   setNameArg($arg)
     This is the argument to pass to the fetchrow_hashref() call on the
     underlying DBI object. By default, this is 'NAME_lc', so that all field
@@ -95,13 +111,11 @@ METHODS
   There are also underscore_separated versions of these methods.
         E.g., nativeSelectLoop() becomes native_select_loop()
 
-EXAMPLES
 TODO
     Allow creation from existing DBI handle.
     Logging
     Allow prepare() and execute()
 
-BUGS
 AUTHOR
         Don Owens <don@owensnet.com>
 
@@ -113,5 +127,5 @@ COPYRIGHT
         itself.
 
 VERSION
-        0.02
+        0.03
 
