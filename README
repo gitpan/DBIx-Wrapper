@@ -58,6 +58,16 @@ METHODS
     Executes the query in $query and returns an array of rows, where each
     row is a hash representing a row of the result.
 
+  abstractSelect($table, \@fields, \%where, \@order)
+    Same as nativeSelect() except uses SQL::Abstract to generate the SQL.
+    See the POD for SQL::Abstract for usage. You must have SQL::Abstract
+    installed for this method to work.
+
+  abstractSelectMulti($table, \@fields, \%where, \@order)
+    Same as nativeSelectMulti() except uses SQL::Abstract to generate the
+    SQL. See the POD for SQL::Abstract for usage. You must have
+    SQL::Abstract installed for this method to work.
+
   nativeSelectLoop($query, @exec_args)
     Executes the query in $query, then returns an object that allows you to
     loop through one result at a time, e.g.,
@@ -92,6 +102,14 @@ METHODS
                    };
         $db->insert('my_doc_table', $data);
 
+    This can also be done by passing a reference to a string with the SQL
+    command, e.g.,
+
+        my $data = { file => 'my_document.txt',
+                     the_date => \'CUR_DATE()'
+                   };
+        $db->insert('my_doc_table', $data);
+
   debugOn(\*FILE_HANDLE)
     Turns on debugging output. Debugging information will be printed to the
     given filehandle.
@@ -119,16 +137,22 @@ TODO
     Logging
     Allow prepare() and execute()
 
+ACKNOWLEDGEMENTS
+        People who have contributed ideas and/or code for this module:
+
+        Mark Stosberg
+        Kevin Wilson
+
 AUTHOR
         Don Owens <don@owensnet.com>
 
 COPYRIGHT
-        Copyright (c) 2003 Don Owens
+        Copyright (c) 2003-2004 Don Owens
 
         All rights reserved. This program is free software; you can
         redistribute it and/or modify it under the same terms as Perl
         itself.
 
 VERSION
-        0.06
+        0.07
 

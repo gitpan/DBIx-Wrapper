@@ -3,7 +3,7 @@
 # Creation date: 2003-03-30 17:52:14
 # Authors: Don
 # Change log:
-# $Id: Makefile.PL,v 1.4 2003/11/02 05:57:03 don Exp $
+# $Id: Makefile.PL,v 1.5 2004/02/16 09:08:08 don Exp $
 
 use strict;
 use Carp;
@@ -29,7 +29,9 @@ use Carp;
                   dist => { COMPRESS => 'gzip -9f', SUFFIX => 'gz' },
                   DIR => [],
                   EXE_FILES => [],
-                  PREREQ_PM => { Carp => 0, DBI => 0 },
+                  PREREQ_PM => { Carp => 0, DBI => 0,
+                                 # 'SQL::Abstract' => 0
+                               },
                   );
 
 }

@@ -2,7 +2,9 @@
 # Creation date: 2003-03-30 12:17:42
 # Authors: Don
 # Change log:
-# $Id: Wrapper.pm,v 1.14 2004/01/15 00:33:19 don Exp $
+# $Id: Wrapper.pm,v 1.17 2004/02/16 09:09:31 don Exp $
+#
+# Copyright (c) 2003-2004 Don Owens
 #
 # All rights reserved. This program is free software; you can
 # redistribute it and/or modify it under the same terms as Perl
@@ -41,7 +43,7 @@ use strict;
     use vars qw($VERSION);
 
     BEGIN {
-        $VERSION = '0.06'; # update below in POD as well
+        $VERSION = '0.07'; # update below in POD as well
     }
 
     use DBI;
@@ -149,6 +151,8 @@ Return the underlying DBI object used to query the database.
 
             if (UNIVERSAL::isa($value, 'DBIx::Wrapper::SQLCommand')) {
                 push @place_holders, $value->asString;
+            } elsif (ref($value) eq 'SCALAR') {
+                push @place_holders, $$value;
             } else {
                 $value = '' unless defined($value);
                 push @place_holders, '?';                
@@ -234,6 +238,8 @@ the row(s) in the database.
             push @fields, $field;
             if (UNIVERSAL::isa($value, 'DBIx::Wrapper::SQLCommand')) {
                 push @set, "$field=" . $value->asString;
+            } elsif (ref($value) eq 'SCALAR') {
+                push @set, "$field=" . $$value;
             } else {
                 $value = "" unless defined $value;
                 push @set, "$field=?";
@@ -406,6 +412,57 @@ each row is a hash representing a row of the result.
     *readArray = \&nativeSelectMulti;
     *native_select_multi = \&nativeSelectMulti;
 
+    sub _getSqlObj {
+        # return SQL::Abstract->new(case => 'textbook', cmp => '=', logic => 'and');
+        require SQL::Abstract;
+        return SQL::Abstract->new(case => 'textbook', cmp => '=');
+    }
+
+=pod
+
+=head2 abstractSelect($table, \@fields, \%where, \@order)
+
+Same as nativeSelect() except uses SQL::Abstract to generate the
+SQL.  See the POD for SQL::Abstract for usage.  You must have
+SQL::Abstract installed for this method to work.
+
+=cut
+    sub abstractSelect {
+        my ($self, $table, $fields, $where, $order) = @_;
+        my $sql_obj = $self->_getSqlObj;
+        my ($query, @bind) = $sql_obj->select($table, $fields, $where, $order);
+
+        if (@bind) {
+            return $self->nativeSelect($query, \@bind);
+        } else {
+            return $self->nativeSelect($query);
+        }
+    }
+    *abstract_select = \&abstractSelect;
+
+=pod
+
+=head2 abstractSelectMulti($table, \@fields, \%where, \@order)
+
+Same as nativeSelectMulti() except uses SQL::Abstract to generate the
+SQL.  See the POD for SQL::Abstract for usage.  You must have
+SQL::Abstract installed for this method to work.
+
+=cut
+    sub abstractSelectMulti {
+        my ($self, $table, $fields, $where, $order) = @_;
+        my $sql_obj = $self->_getSqlObj;
+        my ($query, @bind) = $sql_obj->select($table, $fields, $where, $order);
+
+        if (@bind) {
+            return $self->nativeSelectMulti($query, \@bind);
+        } else {
+            return $self->nativeSelectMulti($query);
+        }
+    }
+
+    *abstract_select_multi = \&abstractSelectMulti;
+
 =pod
 
 =head2 nativeSelectLoop($query, @exec_args)
@@ -511,6 +568,15 @@ Instead, do something like this:
                  the_date => $db->newCommand('CUR_DATE()')
                };
     $db->insert('my_doc_table', $data);
+
+This can also be done by passing a reference to a string with the
+SQL command, e.g.,
+
+    my $data = { file => 'my_document.txt',
+                 the_date => \'CUR_DATE()'
+               };
+    $db->insert('my_doc_table', $data);
+
 
 =cut
     sub newCommand {
@@ -847,13 +913,20 @@ __END__
 
 =back
 
+=head1 ACKNOWLEDGEMENTS
+
+    People who have contributed ideas and/or code for this module:
+
+    Mark Stosberg
+    Kevin Wilson
+
 =head1 AUTHOR
 
     Don Owens <don@owensnet.com>
 
 =head1 COPYRIGHT
 
-    Copyright (c) 2003 Don Owens
+    Copyright (c) 2003-2004 Don Owens
 
     All rights reserved. This program is free software; you can
     redistribute it and/or modify it under the same terms as Perl
@@ -861,6 +934,6 @@ __END__
 
 =head1 VERSION
 
-    0.06
+    0.07
 
 =cut
