@@ -15,9 +15,11 @@ SYNOPSIS
                                     the_date => \"NOW()"
                                   });
      my $rv = $db->replace($table, \%data);
+     my $rv = $db->delete($table, \%keys);
      my $rv = $db->update($table, \%keys, \%data);
      my $rv = $db->smartUpdate($table, \%keys, \%data);
 
+     my $row = $db->selectFromHash($table, \%keys);
      my $row = $db->nativeSelect($query, \@exec_args);
 
      my $loop = $db->nativeSelectExecLoop($query);
@@ -42,6 +44,8 @@ SYNOPSIS
      my $hash = $db->nativeSelectRecordMapping($query, \@exec_args);
      my $hash = $db->nativeSelectRecordDynaMapping($query, $col, \@exec_args);
 
+     my $val = $db->nativeSelectValue($query, \@exec_args);
+
      my $row = $db->abstractSelect($table, \@fields, \%where, \@order);
      my $rows = $db->abstractSelectMulti($table, \@fields, \%where, \@order);
 
@@ -52,6 +56,8 @@ SYNOPSIS
      my $loop = $db->nativeQueryLoop("UPDATE my_table SET value=? WHERE id=?");
      $loop->next([ 'one', 1]);
      $loop->next([ 'two', 2]);
+
+     my $id = $db->getLastInsertId;
 
      $db->debugOn(\*FILE_HANDLE);
 
@@ -93,6 +99,29 @@ METHODS
     Same as insert(), except does a REPLACE instead of an INSERT for
     databases which support it.
 
+  smartReplace($table, \%data)
+     This method is MySQL specific.  If $table has an auto_increment
+     column, the return value will be the value of the auto_increment
+     column.  So if that column was specified in \%data, that value
+     will be returned, otherwise, an insert will be performed and the
+     value of LAST_INSERT_ID() will be returned.  If there is no
+     auto_increment column, but primary keys are provided, the row
+     containing the primary keys will be returned.  Otherwise, a true
+     value will be returned upon success.
+
+  delete($table, \%keys), delete($table, \@keys)
+     Delete rows from table $table using the key/value pairs in %keys
+     to specify the WHERE clause of the query.  Multiple key/value
+     pairs are joined with 'AND' in the WHERE clause.  The cols
+     parameter can optionally be an array ref instead of a hashref.
+     E.g.
+
+         $db->delete($table, [ key1 => $val1, key2 => $val2 ])
+
+     This is so that the order of the parameters in the WHERE clause
+     are kept in the same order.  This is required to use the correct
+     multi field indexes in some databases.
+
   update($table, \%keys, \%data), update($table, \@keys, \%data)
      Update the table using the key/value pairs in %keys to specify
      the WHERE clause of the query.  %data contains the new values
@@ -103,7 +132,13 @@ METHODS
 
      This is so that the order of the parameters in the WHERE clause
      are kept in the same order.  This is required to use the correct
-     multi field indexes in MySQL.
+     multi field indexes in some databases.
+
+  selectFromHash($table, \%keys);
+     Select from table $table using the key/value pairs in %keys to
+     specify the WHERE clause of the query.  Multiple key/value pairs
+     are joined with 'AND' in the WHERE clause.  Returns a single row
+     as a hashref.
 
   smartUpdate($table, \%keys, \%data)
     Same as update(), except that a check is first made to see if there are
@@ -180,6 +215,12 @@ METHODS
      index for the column you wish to use.  Otherwise, $col is
      assumed to contain the field name for the two columns you wish
      to use.
+
+  nativeSelectValue($query, \@exec_args)
+     Returns a single value, the first column from the first row of
+     the result.  Returns undef on error or if there are no rows in
+     the result.  Note this may be the same value returned for a NULL
+     value in the result.
 
   abstractSelect($table, \@fields, \%where, \@order)
     Same as nativeSelect() except uses SQL::Abstract to generate the SQL.
@@ -271,6 +312,10 @@ METHODS
     Calls ping() on the underlying DBI object to see if the database
     connection is still up.
 
+  getLastInsertId(), get_last_insert_id(), last_insert_id()
+     Returns the last_insert_id.  This is MySQL specific for now.  It
+     just runs the query "SELECT LAST_INSERT_ID()".
+
   There are also underscore_separated versions of these methods.
         E.g., nativeSelectLoop() becomes native_select_loop()
 
@@ -295,5 +340,5 @@ COPYRIGHT
         itself.
 
 VERSION
-        0.09
+        0.10
 

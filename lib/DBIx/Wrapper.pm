@@ -2,7 +2,7 @@
 # Creation date: 2003-03-30 12:17:42
 # Authors: Don
 # Change log:
-# $Id: Wrapper.pm,v 1.28 2004/06/03 06:49:36 don Exp $
+# $Id: Wrapper.pm,v 1.32 2004/06/08 17:24:53 don Exp $
 #
 # Copyright (c) 2003-2004 Don Owens
 #
@@ -31,9 +31,11 @@ DBIx::Wrapper - A wrapper around the DBI
                                 the_date => \"NOW()"
                               });
  my $rv = $db->replace($table, \%data);
+ my $rv = $db->delete($table, \%keys);
  my $rv = $db->update($table, \%keys, \%data);
  my $rv = $db->smartUpdate($table, \%keys, \%data);
 
+ my $row = $db->selectFromHash($table, \%keys);
  my $row = $db->nativeSelect($query, \@exec_args);
 
  my $loop = $db->nativeSelectExecLoop($query);
@@ -58,6 +60,8 @@ DBIx::Wrapper - A wrapper around the DBI
  my $hash = $db->nativeSelectRecordMapping($query, \@exec_args);
  my $hash = $db->nativeSelectRecordDynaMapping($query, $col, \@exec_args);
 
+ my $val = $db->nativeSelectValue($query, \@exec_args);
+
  my $row = $db->abstractSelect($table, \@fields, \%where, \@order);
  my $rows = $db->abstractSelectMulti($table, \@fields, \%where, \@order);
 
@@ -68,6 +72,8 @@ DBIx::Wrapper - A wrapper around the DBI
  my $loop = $db->nativeQueryLoop("UPDATE my_table SET value=? WHERE id=?");
  $loop->next([ 'one', 1]);
  $loop->next([ 'two', 2]);
+
+ my $id = $db->getLastInsertId;
 
  $db->debugOn(\*FILE_HANDLE);
 
@@ -98,7 +104,7 @@ use strict;
     use vars qw($VERSION);
 
     BEGIN {
-        $VERSION = '0.09'; # update below in POD as well
+        $VERSION = '0.10'; # update below in POD as well
     }
 
     use DBI;
@@ -277,7 +283,20 @@ databases which support it.
         return $self->_insert_replace('REPLACE', $table, $data);
     }
 
-    # HERE - In progress
+=pod
+
+=head2 smartReplace($table, \%data)
+
+ This method is MySQL specific.  If $table has an auto_increment
+ column, the return value will be the value of the auto_increment
+ column.  So if that column was specified in \%data, that value
+ will be returned, otherwise, an insert will be performed and the
+ value of LAST_INSERT_ID() will be returned.  If there is no
+ auto_increment column, but primary keys are provided, the row
+ containing the primary keys will be returned.  Otherwise, a true
+ value will be returned upon success.
+
+=cut
     sub smartReplace {
         my ($self, $table, $data, $keys) = @_;
 
@@ -300,11 +319,6 @@ databases which support it.
                 }
             }
 
-#             use Data::Dumper;
-#             print Data::Dumper->Dump([ $info_list ], [ 'info_list' ]) . "\n";
-
-#             print Data::Dumper->Dump([ $key_list ], [ 'key_list' ]) . "\n";
-
             my $orig_auto_incr = $auto_incr;
             $auto_incr = lc($auto_incr);
             my $keys_provided = [];
@@ -318,10 +332,6 @@ databases which support it.
                 }
             }
 
-#             use Data::Dumper;
-#             print Data::Dumper->Dump([ $keys_provided ], [ 'keys_provided' ]) . "\n";
-
-            # HERE
             if (@$keys_provided) {
                 # do replace and return the value of this field
                 my $rv = $self->replace($table, $data);
@@ -351,6 +361,56 @@ databases which support it.
 
 =pod
 
+=head2 delete($table, \%keys), delete($table, \@keys)
+
+ Delete rows from table $table using the key/value pairs in %keys
+ to specify the WHERE clause of the query.  Multiple key/value
+ pairs are joined with 'AND' in the WHERE clause.  The cols
+ parameter can optionally be an array ref instead of a hashref.
+ E.g.
+
+     $db->delete($table, [ key1 => $val1, key2 => $val2 ])
+
+ This is so that the order of the parameters in the WHERE clause
+ are kept in the same order.  This is required to use the correct
+ multi field indexes in some databases.
+
+=cut
+    sub delete {
+        my ($self, $table, $keys) = @_;
+
+        unless ($keys and (UNIVERSAL::isa($keys, 'HASH') or UNIVERSAL::isa($keys, 'ARRAY'))) {
+            return $self->setErr(-1, 'DBIx::Wrapper: No keys passed to update()');
+        }
+
+        my @keys;
+        my @values;
+        if (ref($keys) eq 'ARRAY') {
+            # allow this to maintain order in the WHERE clause in
+            # order to use the right indexes
+            my @copy = @$keys;
+            while (my $key = shift @copy) {
+                push @keys, $key;
+                my $val = shift @copy; # shift off the value
+            }
+            $keys = { @$keys };
+        } else {
+            @keys = keys %$keys;
+        }
+        push @values, @$keys{@keys};
+
+        my $where = join(" AND ", map { "$_=?" } @keys);
+        my $query = qq{DELETE FROM $table WHERE $where};
+
+        my $sth = $self->_getStatementHandleForQuery($query, \@values);
+        return $sth unless $sth;
+        $sth->finish;
+        
+        return 1;
+    }
+
+=pod
+
 =head2 update($table, \%keys, \%data), update($table, \@keys, \%data)
 
  Update the table using the key/value pairs in %keys to specify
@@ -362,12 +422,20 @@ databases which support it.
 
  This is so that the order of the parameters in the WHERE clause
  are kept in the same order.  This is required to use the correct
- multi field indexes in MySQL.
+ multi field indexes in some databases.
 
 =cut
     sub update {
         my ($self, $table, $keys, $data) = @_;
 
+        unless ($keys and (UNIVERSAL::isa($keys, 'HASH') or UNIVERSAL::isa($keys, 'ARRAY'))) {
+            return $self->setErr(-1, 'DBIx::Wrapper: No keys passed to update()');
+        }
+
+        unless ($data and UNIVERSAL::isa($data, 'HASH')) {
+            return $self->setErr(-1, 'DBIx::Wrapper: No values passed to update()');
+        }
+        
         my @fields;
         my @values;
         my @set;
@@ -411,7 +479,16 @@ databases which support it.
         return 1;
     }
 
-    # HERE - In progress
+=pod
+
+=head2 selectFromHash($table, \%keys);
+
+ Select from table $table using the key/value pairs in %keys to
+ specify the WHERE clause of the query.  Multiple key/value pairs
+ are joined with 'AND' in the WHERE clause.  Returns a single row
+ as a hashref.
+
+=cut
     sub selectFromHash {
         my ($self, $table, $keys, $extra) = @_;
         my @keys = keys %$keys;
@@ -807,6 +884,31 @@ on error.
         # return SQL::Abstract->new(case => 'textbook', cmp => '=', logic => 'and');
         require SQL::Abstract;
         return SQL::Abstract->new(case => 'textbook', cmp => '=');
+    }
+
+=pod
+
+=head2 nativeSelectValue($query, \@exec_args)
+
+ Returns a single value, the first column from the first row of
+ the result.  Returns undef on error or if there are no rows in
+ the result.  Note this may be the same value returned for a NULL
+ value in the result.
+
+=cut        
+    sub nativeSelectValue {
+        my ($self, $query, $exec_args) = @_;
+        my $row;
+        if ($exec_args and UNIVERSAL::isa($exec_args, 'ARRAY')) {
+            $row = $self->nativeSelectWithArrayRef($query, $exec_args);
+        } else {
+            $row = $self->nativeSelectWithArrayRef($query);
+        }
+        if ($row and @$row) {
+            return $row->[0];
+        }
+
+        return undef;
     }
 
 =pod
@@ -1310,16 +1412,25 @@ connection is still up.
 
     # bah, DBI's last_insert_id is not working for me, so for
     # now this will be MySQL only
+
+=pod
+
+=head2 getLastInsertId(), get_last_insert_id(), last_insert_id()
+
+ Returns the last_insert_id.  This is MySQL specific for now.  It
+ just runs the query "SELECT LAST_INSERT_ID()".
+
+=cut
     sub getLastInsertId {
         my ($self, $catalog, $schema, $table, $field, $attr) = @_;
         if (0 and DBI->VERSION >= 1.38) {
             my $dbh = $self->_getDatabaseHandle;
             return $dbh->last_insert_id($catalog, $schema, $table, $field, $attr);
         } else {
-            my $query = qq{SELECT LAST_INSERT_ID() AS id};
-            my $row = $self->nativeSelect($query);
-            if ($row and %$row) {
-                return $$row{id};
+            my $query = qq{SELECT LAST_INSERT_ID()};
+            my $row = $self->nativeSelectWithArrayRef($query);
+            if ($row and @$row) {
+                return $$row[0];
             }
             return undef;
         }
@@ -1371,6 +1482,6 @@ __END__
 
 =head1 VERSION
 
-    0.09
+    0.10
 
 =cut

@@ -1,0 +1,6 @@
+Version 0.10
+	my $rv = $dbh->delete($table, \%keys)
+        my $id = $dbh->getLastInsertId;
+        my $val = $dbh->nativeSelectValue($query, \@exec_args);
+        my $rv = $dbh->smartReplace($table, \%data);
+        my $row = $dbh->selectFromHash($table, \%keys);
