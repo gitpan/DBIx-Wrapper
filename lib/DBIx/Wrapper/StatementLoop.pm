@@ -2,14 +2,14 @@
 # Creation date: 2003-03-30 15:24:44
 # Authors: Don
 # Change log:
-# $Id: StatementLoop.pm,v 1.2 2004/01/15 00:33:19 don Exp $
+# $Id: StatementLoop.pm,v 1.3 2004/04/21 20:00:53 don Exp $
 
 use strict;
 
 {   package DBIx::Wrapper::StatementLoop;
 
     use vars qw($VERSION);
-    $VERSION = do { my @r=(q$Revision: 1.2 $=~/\d+/g); sprintf "%d."."%02d"x$#r,@r };
+    $VERSION = do { my @r=(q$Revision: 1.3 $=~/\d+/g); sprintf "%d."."%02d"x$#r,@r };
 
     use base 'DBIx::Wrapper::Statement';
 
@@ -33,7 +33,7 @@ use strict;
         $exec_args = [] unless $exec_args;
 
         my $sth = $self->_getSth;
-        return $sth->execute(@$exec_args);
+        $sth->execute(@$exec_args);
     }
 
     sub DESTROY {
@@ -74,6 +74,6 @@ DBIx::Wrapper::StatementLoop -
 
 =head1 VERSION
 
-$Id: StatementLoop.pm,v 1.2 2004/01/15 00:33:19 don Exp $
+$Id: StatementLoop.pm,v 1.3 2004/04/21 20:00:53 don Exp $
 
 =cut

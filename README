@@ -2,9 +2,63 @@ NAME
     DBIx::Wrapper - A wrapper around the DBI
 
 SYNOPSIS
-    use DBIx::Wrapper;
+     use DBIx::Wrapper;
 
-    my $db = DBIx::Wrapper->connect($dsn, $user, $auth, \%attr);
+     my $db = DBIx::Wrapper->connect($dsn, $user, $auth, \%attr);
+
+     my $dbi_obj = DBI->connect(...)
+     my $db = DBIx::Wrapper->newFromDBI($dbi_obj);
+
+     my $dbi_obj = $db->getDBI;
+
+     my $rv = $db->insert($table, { id => 5, val => "myval",
+                                    the_date => \"NOW()"
+                                  });
+     my $rv = $db->replace($table, \%data);
+     my $rv = $db->update($table, \%keys, \%data);
+     my $rv = $db->smartUpdate($table, \%keys, \%data);
+
+     my $row = $db->nativeSelect($query, \@exec_args);
+
+     my $loop = $db->nativeSelectExecLoop($query);
+     foreach my $val (@vals) {
+         my $row = $loop->next([ $val ]);
+     }
+
+     my $row = $db->nativeSelectWithArrayRef($query, \@exec_args);
+     my $rows = $db->nativeSelectMulti($query, \@exec_args);
+
+     my $loop = $db->nativeSelectMultiExecLoop($query)
+     foreach my $val (@vals) {
+         my $rows = $loop->next([ $val ]);
+     }
+
+     my $rows = $db->nativeSelectMultiWithArrayRef($query, \@exec_args);
+
+     my $hash = $db->nativeSelectMapping($query, \@exec_args);
+     my $hash = $db->nativeSelectDynaMapping($query, \@cols, \@exec_args);
+
+     my $hash = $db->nativeSelectRecordMapping($query, \@exec_args);
+     my $hash = $db->nativeSelectRecordDynaMapping($query, $col, \@exec_args);
+
+     my $row = $db->abstractSelect($table, \@fields, \%where, \@order);
+     my $rows = $db->abstractSelectMulti($table, \@fields, \%where, \@order);
+
+     my $loop = $db->nativeSelectLoop($query, @exec_args);
+
+     my $rv = $db->nativeQuery($query, @exec_args);
+
+     my $loop = $db->nativeQueryLoop("UPDATE my_table SET value=? WHERE id=?");
+     $loop->next([ 'one', 1]);
+     $loop->next([ 'two', 2]);
+
+     $db->debugOn(\*FILE_HANDLE);
+
+     $db->setNameArg($arg)
+
+     $db->commit();
+     $db->ping();
+     $db->err();
 
 DESCRIPTION
     DBIx::Wrapper provides a wrapper around the DBI that makes it a bit
@@ -38,10 +92,17 @@ METHODS
     Same as insert(), except does a REPLACE instead of an INSERT for
     databases which support it.
 
-  update($table, \%keys, \%data)
-    Update the table using the key/value pairs in %keys to specify the WHERE
-    clause of the query. %data contains the new values for the row(s) in the
-    database.
+  update($table, \%keys, \%data), update($table, \@keys, \%data)
+     Update the table using the key/value pairs in %keys to specify
+     the WHERE clause of the query.  %data contains the new values
+     for the row(s) in the database.  The keys parameter can
+     optionally be an array ref instead of a hashref.  E.g.,
+
+         $db->update($table, [ key1 => $val1, key2 => $val2 ], \%data);
+
+     This is so that the order of the parameters in the WHERE clause
+     are kept in the same order.  This is required to use the correct
+     multi field indexes in MySQL.
 
   smartUpdate($table, \%keys, \%data)
     Same as update(), except that a check is first made to see if there are
@@ -49,14 +110,75 @@ METHODS
     otherwise, insert() is called.
 
   nativeSelect($query, \@exec_args)
-    Executes the query in $query and returns a single row result. If there
-    are multiple rows in the result, the rest get silently dropped.
-    @exec_args are the same arguments you would pass to an execute() called
-    on a DBI object.
+    Executes the query in $query and returns a single row result (as a hash
+    ref). If there are multiple rows in the result, the rest get silently
+    dropped. @exec_args are the same arguments you would pass to an
+    execute() called on a DBI object. Returns undef on error.
 
-  nativeSelectMulti($query, @exec_args)
-    Executes the query in $query and returns an array of rows, where each
-    row is a hash representing a row of the result.
+  nativeSelectExecLoop($query)
+     Like nativeSelect(), but returns a loop object that can be used
+     to execute the same query over and over with different bind
+     parameters.  This does a single DBI prepare() instead of a new
+     prepare() for select.
+
+     E.g.,
+
+         my $loop = $db->nativeSelectExecLoop("SELECT * FROM mytable WHERE id=?");
+         foreach my $id (@ids) {
+             my $row = $loop->next([ $id ]);
+         }
+
+  nativeSelectWithArrayRef($query, \@exec_args)
+     Like nativeSelect(), but return a reference to an array instead
+     of a hash.  Returns undef on error.  If there are no results
+     from the query, a reference to an empty array is returned.
+
+  nativeSelectMulti($query, \@exec_args)
+     Executes the query in $query and returns an array of rows, where
+     each row is a hash representing a row of the result.  Returns
+     undef on error.  If there are no results for the query, an empty
+     array ref is returned.
+
+  nativeSelectMultiExecLoop($query)
+     Like nativeSelectExecLoop(), but returns an array of rows, where
+     each row is a hash representing a row of the result.
+
+  nativeSelectMultiWithArrayRef($query, \@exec_args)
+     Like nativeSelectMulti(), but return a reference to an array of
+     arrays instead of to an array of hashes.  Returns undef on error.
+
+  nativeSelectMapping($query, \@exec_args)
+     Executes the given query and returns a reference to a hash
+     containing the first and second columns of the results as
+     key/value pairs.
+
+  nativeSelectDynaMapping($query, \@cols, \@exec_args)
+     Similar to nativeSelectMapping() except you specify which
+     columns to use for the key/value pairs in the return hash.  If
+     the first element of @cols starts with a digit, then @cols is
+     assumed to contain indexes for the two columns you wish to use.
+     Otherwise, @cols is assumed to contain the field names for the
+     two columns you wish to use.
+
+     For example,
+
+         nativeSelectMapping($query, \@exec_args) is
+
+      equivalent (and in fact calls) to
+
+         nativeSelectDynaMapping($query, [ 0, 1 ], $exec_args).
+
+  nativeSelectRecordMapping($query, \@exec_args)
+     Similar to nativeSelectMapping(), except the values in the hash
+     are references to the corresponding record (as a hash).
+
+  nativeSelectRecordDynaMapping($query, $col, \@exec_args)
+     Similar to nativeSelectRecordMapping(), except you specify
+     which column is the key in each key/value pair in the hash.  If
+     $col starts with a digit, then it is assumed to contain the
+     index for the column you wish to use.  Otherwise, $col is
+     assumed to contain the field name for the two columns you wish
+     to use.
 
   abstractSelect($table, \@fields, \%where, \@order)
     Same as nativeSelect() except uses SQL::Abstract to generate the SQL.
@@ -76,6 +198,17 @@ METHODS
         while (my $row = $loop->next) {
             my $id = $$row{id};
         }
+
+        To get the number of rows selected, you can call the
+        rowCountCurrent() method on the loop object, e.g.,
+
+        my $loop = $db->nativeSelectLoop("SELECT * FROM my_table");
+        my $rows_in_result = $loop->rowCountCurrent;
+
+        The count() method is an alias for rowCountCurrent().
+
+        To get the number of rows returned by next() so far, use the
+        rowCountTotal() method.
 
   nativeQuery($query, @exec_args)
     Executes the query in $query and returns true if successful. This is
@@ -126,22 +259,29 @@ METHODS
     want the case of the field names to be what the underlying database
     driveer returns them as, call $db->setNameArg('NAME').
 
+  err()
+    Calls err() on the underlying DBI object, which returns the native
+    database engine error code from the last driver method called.
+
   commit()
     Calls commit() on the underlying DBI object to commit your transactions.
+
+  ping()
+    Calls ping() on the underlying DBI object to see if the database
+    connection is still up.
 
   There are also underscore_separated versions of these methods.
         E.g., nativeSelectLoop() becomes native_select_loop()
 
 TODO
-    Allow creation from existing DBI handle.
-    Logging
-    Allow prepare() and execute()
+    More logging/debugging options
+    Allow prepare() and execute() for easier integration into existing code.
 
 ACKNOWLEDGEMENTS
         People who have contributed ideas and/or code for this module:
 
-        Mark Stosberg
         Kevin Wilson
+        Mark Stosberg
 
 AUTHOR
         Don Owens <don@owensnet.com>
@@ -154,5 +294,5 @@ COPYRIGHT
         itself.
 
 VERSION
-        0.07
+        0.08
 

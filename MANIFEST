@@ -2,10 +2,11 @@ MANIFEST
 README
 INSTALL
 Makefile.PL
-Wrapper.pm
-Wrapper/SelectLoop.pm
-Wrapper/SQLCommand.pm
-Wrapper/StatementLoop.pm
-Wrapper/Statement.pm
+lib/DBIx/Wrapper.pm
+lib/DBIx/Wrapper/SelectLoop.pm
+lib/DBIx/Wrapper/SelectExecLoop.pm
+lib/DBIx/Wrapper/SQLCommand.pm
+lib/DBIx/Wrapper/StatementLoop.pm
+lib/DBIx/Wrapper/Statement.pm
 t/00use.t
 META.yml                                 Module meta-data (added by MakeMaker)

@@ -2,7 +2,7 @@
 # Creation date: 2003-03-30 12:17:42
 # Authors: Don
 # Change log:
-# $Id: Wrapper.pm,v 1.17 2004/02/16 09:09:31 don Exp $
+# $Id: Wrapper.pm,v 1.26 2004/05/05 03:58:10 don Exp $
 #
 # Copyright (c) 2003-2004 Don Owens
 #
@@ -18,9 +18,63 @@ DBIx::Wrapper - A wrapper around the DBI
 
 =head1 SYNOPSIS
 
-use DBIx::Wrapper;
+ use DBIx::Wrapper;
 
-my $db = DBIx::Wrapper->connect($dsn, $user, $auth, \%attr);
+ my $db = DBIx::Wrapper->connect($dsn, $user, $auth, \%attr);
+
+ my $dbi_obj = DBI->connect(...)
+ my $db = DBIx::Wrapper->newFromDBI($dbi_obj);
+
+ my $dbi_obj = $db->getDBI;
+
+ my $rv = $db->insert($table, { id => 5, val => "myval",
+                                the_date => \"NOW()"
+                              });
+ my $rv = $db->replace($table, \%data);
+ my $rv = $db->update($table, \%keys, \%data);
+ my $rv = $db->smartUpdate($table, \%keys, \%data);
+
+ my $row = $db->nativeSelect($query, \@exec_args);
+
+ my $loop = $db->nativeSelectExecLoop($query);
+ foreach my $val (@vals) {
+     my $row = $loop->next([ $val ]);
+ }
+
+ my $row = $db->nativeSelectWithArrayRef($query, \@exec_args);
+ my $rows = $db->nativeSelectMulti($query, \@exec_args);
+
+ my $loop = $db->nativeSelectMultiExecLoop($query)
+ foreach my $val (@vals) {
+     my $rows = $loop->next([ $val ]);
+ }
+
+ my $rows = $db->nativeSelectMultiWithArrayRef($query, \@exec_args);
+
+ my $hash = $db->nativeSelectMapping($query, \@exec_args);
+ my $hash = $db->nativeSelectDynaMapping($query, \@cols, \@exec_args);
+
+ my $hash = $db->nativeSelectRecordMapping($query, \@exec_args);
+ my $hash = $db->nativeSelectRecordDynaMapping($query, $col, \@exec_args);
+
+ my $row = $db->abstractSelect($table, \@fields, \%where, \@order);
+ my $rows = $db->abstractSelectMulti($table, \@fields, \%where, \@order);
+
+ my $loop = $db->nativeSelectLoop($query, @exec_args);
+
+ my $rv = $db->nativeQuery($query, @exec_args);
+
+ my $loop = $db->nativeQueryLoop("UPDATE my_table SET value=? WHERE id=?");
+ $loop->next([ 'one', 1]);
+ $loop->next([ 'two', 2]);
+
+ $db->debugOn(\*FILE_HANDLE);
+
+ $db->setNameArg($arg)
+
+ $db->commit();
+ $db->ping();
+ $db->err();
 
 =head1 DESCRIPTION
 
@@ -43,13 +97,14 @@ use strict;
     use vars qw($VERSION);
 
     BEGIN {
-        $VERSION = '0.07'; # update below in POD as well
+        $VERSION = '0.08'; # update below in POD as well
     }
 
     use DBI;
     use DBIx::Wrapper::SQLCommand;
     use DBIx::Wrapper::Statement;
     use DBIx::Wrapper::SelectLoop;
+    use DBIx::Wrapper::SelectExecLoop;
     use DBIx::Wrapper::StatementLoop;
 
     sub _new {
@@ -76,13 +131,15 @@ An alias for connect().
 
         my $dbh = DBI->connect($data_source, $username, $auth, $attr);
         unless (ref($attr) eq 'HASH' and defined($$attr{PrintError}) and not $$attr{PrintError}) {
-            $self->addDebugLevel(2); # print on error
+            # FIXME: make a way to set debug level here
+            # $self->addDebugLevel(2); # print on error
         }
         unless ($dbh) {
             if ($self->_isDebugOn) {
                 $self->_printDebug(Carp::longmess($DBI::errstr));
             } else {
-                $self->_printDbiError;
+                $self->_printDbiError
+                    if not defined($$attr{PrintError}) or $$attr{PrintError};
             }
             return undef;
         }
@@ -138,6 +195,7 @@ Return the underlying DBI object used to query the database.
         return $self->_getDatabaseHandle;
     }
     *get_dbi = \&getDBI;
+    *getDbi = \&getDBI;
 
     sub _insert_replace {
         my ($self, $operation, $table, $data) = @_;
@@ -220,11 +278,18 @@ databases which support it.
 
 =pod
 
-=head2 update($table, \%keys, \%data)
+=head2 update($table, \%keys, \%data), update($table, \@keys, \%data)
 
-Update the table using the key/value pairs in %keys to specify
-the WHERE clause of the query.  %data contains the new values for
-the row(s) in the database.
+ Update the table using the key/value pairs in %keys to specify
+ the WHERE clause of the query.  %data contains the new values
+ for the row(s) in the database.  The keys parameter can
+ optionally be an array ref instead of a hashref.  E.g.,
+
+     $db->update($table, [ key1 => $val1, key2 => $val2 ], \%data);
+
+ This is so that the order of the parameters in the WHERE clause
+ are kept in the same order.  This is required to use the correct
+ multi field indexes in MySQL.
 
 =cut
     sub update {
@@ -247,39 +312,30 @@ the row(s) in the database.
             }
         }
 
-        my @keys = keys %$keys;
+        my @keys;
+        if (ref($keys) eq 'ARRAY') {
+            # allow this to maintain order in the WHERE clause in
+            # order to use the right indexes
+            my @copy = @$keys;
+            while (my $key = shift @copy) {
+                push @keys, $key;
+                my $val = shift @copy; # shift off the value
+            }
+            $keys = { @$keys };
+        } else {
+            @keys = keys %$keys;
+        }
         push @values, @$keys{@keys};
 
         my $set = join(",", @set);
         my $where = join(" AND ", map { "$_=?" } @keys);
 
         my $query = qq{UPDATE $table SET $set WHERE $where};
-
-        $self->_printDebug($query);
-
-        my $dbh = $self->_getDatabaseHandle;
-        my $sth = $dbh->prepare($query);
-        unless ($sth) {
-            if ($self->_isDebugOn) {
-                $self->_printDebug(Carp::longmess($dbh->errstr) . "\nQuery was '$query'\n");
-            } else {
-                $self->_printDbiError("\nQuery was '$query'\n");
-            }
-            return $self->setErr(0, $dbh->errstr);
-        }
-        
-        my $rv = $sth->execute(@values);
-        unless ($rv) {
-            if ($self->_isDebugOn) {
-                $self->_printDebug(Carp::longmess($dbh->errstr) . "\nQuery was '$query'\n");
-            } else {
-                $self->_printDbiError("\nQuery was '$query'\n");
-            }
-            return $self->setErr(1, $dbh->errstr);
-        }
+        my $sth = $self->_getStatementHandleForQuery($query, \@values);
+        return $sth unless $sth;
         $sth->finish;
         
-        return $rv;
+        return 1;
     }
 
 =pod
@@ -313,17 +369,7 @@ is called, otherwise, insert() is called.
     }
     *smart_update = \&smartUpdate;
 
-=pod
-
-=head2 nativeSelect($query, \@exec_args)
-
-Executes the query in $query and returns a single row result.  If
-there are multiple rows in the result, the rest get silently
-dropped.  @exec_args are the same arguments you would pass to an
-execute() called on a DBI object.
-
-=cut
-    sub nativeSelect {
+    sub _getStatementHandleForQuery {
         my ($self, $query, $exec_args) = @_;
         
         if (scalar(@_) == 3) {
@@ -343,6 +389,7 @@ execute() called on a DBI object.
             }
             return $self->setErr(0, $dbh->errstr);
         }
+
         my $rv = $sth->execute(@$exec_args);
         unless ($rv) {
             if ($self->_isDebugOn) {
@@ -352,58 +399,123 @@ execute() called on a DBI object.
             }
             return $self->setErr(1, $dbh->errstr);
         }
+
+        return $sth;
+    }
+
+=pod
+
+=head2 nativeSelect($query, \@exec_args)
+
+Executes the query in $query and returns a single row result (as
+a hash ref).  If there are multiple rows in the result, the rest
+get silently dropped.  @exec_args are the same arguments you
+would pass to an execute() called on a DBI object.  Returns undef
+on error.
+
+=cut
+    sub nativeSelect {
+        my ($self, $query, $exec_args) = @_;
+
+        my $sth;
+        if (scalar(@_) == 3) {
+            $sth = $self->_getStatementHandleForQuery($query, $exec_args);
+        } else {
+            $sth = $self->_getStatementHandleForQuery($query);
+        }
+        
+        return $sth unless $sth;
+        
         my $result = $sth->fetchrow_hashref($self->getNameArg);
         $sth->finish;
 
-        return $result;
-    }
+        return $result; 
+   }
 
     *read = \&nativeSelect;
     *native_select = \&nativeSelect;
 
 =pod
 
-=head2 nativeSelectMulti($query, @exec_args)
+=head2 nativeSelectExecLoop($query)
 
-Executes the query in $query and returns an array of rows, where
-each row is a hash representing a row of the result.
+ Like nativeSelect(), but returns a loop object that can be used
+ to execute the same query over and over with different bind
+ parameters.  This does a single DBI prepare() instead of a new
+ prepare() for select.
+
+ E.g.,
+
+     my $loop = $db->nativeSelectExecLoop("SELECT * FROM mytable WHERE id=?");
+     foreach my $id (@ids) {
+         my $row = $loop->next([ $id ]);
+     }
+
+=cut    
+    # added for v 0.08
+    sub nativeSelectExecLoop {
+        my ($self, $query) = @_;
+        return DBIx::Wrapper::SelectExecLoop->new($self, $query);
+    }
+    *native_select_exec_loop = \&nativeSelectExecLoop;
+
+=pod
+
+=head2 nativeSelectWithArrayRef($query, \@exec_args)
+
+ Like nativeSelect(), but return a reference to an array instead
+ of a hash.  Returns undef on error.  If there are no results
+ from the query, a reference to an empty array is returned.
+
+=cut
+    sub nativeSelectWithArrayRef {
+        my ($self, $query, $exec_args) = @_;
+
+        my $sth;
+        if (scalar(@_) == 3) {
+            $sth = $self->_getStatementHandleForQuery($query, $exec_args);
+        } else {
+            $sth = $self->_getStatementHandleForQuery($query);
+        }
+        
+        return $sth unless $sth;
+        
+        my $result = $sth->fetchrow_arrayref($self->getNameArg);
+        $sth->finish;
+
+        # have to make copy because recent version of DBI now
+        # return the same array reference each time
+        return [ @$result ];
+    }
+    *native_select_with_array_ref = \&nativeSelectArrayWithArrayRef;
+
+=pod
+
+=head2 nativeSelectMulti($query, \@exec_args)
+
+ Executes the query in $query and returns an array of rows, where
+ each row is a hash representing a row of the result.  Returns
+ undef on error.  If there are no results for the query, an empty
+ array ref is returned.
 
 =cut
     sub nativeSelectMulti {
         my ($self, $query, $exec_args) = @_;
 
+        my $sth;
         if (scalar(@_) == 3) {
-            $exec_args = [ $exec_args ] unless ref($exec_args);
+            $sth = $self->_getStatementHandleForQuery($query, $exec_args);
+        } else {
+            $sth = $self->_getStatementHandleForQuery($query);
         }
-        $exec_args = [] unless $exec_args;
-
-        $self->_printDebug($query);
-
-        my $dbh = $self->_getDatabaseHandle;
-        my $sth = $dbh->prepare($query);
-        unless ($sth) {
-            if ($self->_isDebugOn) {
-                $self->_printDebug(Carp::longmess($dbh->errstr) . "\nQuery was '$query'\n");
-            } else {
-                $self->_printDbiError("\nQuery was '$query'\n");
-            }
-            return $self->setErr(0, $dbh->errstr);
-        }
-        
-        my $rv = $sth->execute(@$exec_args);
-        unless ($rv) {
-            if ($self->_isDebugOn) {
-                $self->_printDebug(Carp::longmess($dbh->errstr) . "\nQuery was '$query'\n");
-            } else {
-                $self->_printDbiError("\nQuery was '$query'\n");
-            }
-            return $self->setErr(1, $dbh->errstr);
-        }
+        return $sth unless $sth;
         
         my $rows = [];
         while (my $row = $sth->fetchrow_hashref($self->getNameArg)) {
             push @$rows, $row;
         }
+        my $col_names = $sth->{$self->getNameArg};
+        $$self{_last_col_names} = $col_names;
         $sth->finish;
 
         return $rows;
@@ -412,6 +524,191 @@ each row is a hash representing a row of the result.
     *readArray = \&nativeSelectMulti;
     *native_select_multi = \&nativeSelectMulti;
 
+=pod
+
+=head2 nativeSelectMultiExecLoop($query)
+
+ Like nativeSelectExecLoop(), but returns an array of rows, where
+ each row is a hash representing a row of the result.
+
+=cut
+    sub nativeSelectMultiExecLoop {
+        my ($self, $query) = @_;
+        return DBIx::Wrapper::SelectExecLoop->new($self, $query, 1);
+    }
+    *native_select_multi_exec_loop = \&nativeSelectMultiExecLoop;
+
+=pod
+
+=head2 nativeSelectMultiWithArrayRef($query, \@exec_args)
+
+ Like nativeSelectMulti(), but return a reference to an array of
+ arrays instead of to an array of hashes.  Returns undef on error.
+
+=cut
+    
+    sub nativeSelectMultiWithArrayRef {
+        my ($self, $query, $exec_args) = @_;
+
+        my $sth;
+        if (scalar(@_) == 3) {
+            $sth = $self->_getStatementHandleForQuery($query, $exec_args);
+        } else {
+            $sth = $self->_getStatementHandleForQuery($query);
+        }
+        
+        return $sth unless $sth;
+        
+        my $list = [];
+       
+        while (my $result = $sth->fetchrow_arrayref()) {
+            # have to make copy because recent version of DBI now
+            # return the same array reference each time
+            push @$list, [ @$result ];
+        }
+        $sth->finish;
+
+        return $list;
+    }
+    *native_select_multi_with_array_ref = \&nativeSelectMultiWithArrayRef;
+
+=pod
+
+=head2 nativeSelectMapping($query, \@exec_args)
+
+ Executes the given query and returns a reference to a hash
+ containing the first and second columns of the results as
+ key/value pairs.
+
+=cut
+    sub nativeSelectMapping {
+        my ($self, $query, $exec_args) = @_;
+        if (scalar(@_) == 3) {
+            $self->nativeSelectDynaMapping($query, [ 0, 1 ], $exec_args);
+        } else {
+            $self->nativeSelectDynaMapping($query, [ 0, 1 ]);
+        }
+    }
+    *native_select_mapping = \&nativeSelectMapping;
+
+=pod
+
+=head2 nativeSelectDynaMapping($query, \@cols, \@exec_args)
+
+ Similar to nativeSelectMapping() except you specify which
+ columns to use for the key/value pairs in the return hash.  If
+ the first element of @cols starts with a digit, then @cols is
+ assumed to contain indexes for the two columns you wish to use.
+ Otherwise, @cols is assumed to contain the field names for the
+ two columns you wish to use.
+
+ For example,
+
+     nativeSelectMapping($query, \@exec_args) is
+
+  equivalent (and in fact calls) to
+
+     nativeSelectDynaMapping($query, [ 0, 1 ], $exec_args).
+
+=cut
+    # FIXME: return undef on error
+    sub nativeSelectDynaMapping {
+        my ($self, $query, $cols, $exec_args) = @_;
+
+        my ($first, $second) = @$cols;
+        my $map = {};
+        if ($first =~ /^\d/) {
+            my $rows;
+            if ($exec_args and @$exec_args) {
+                $rows = $self->nativeSelectMultiWithArrayRef($query, $exec_args);
+            } else {
+                $rows = $self->nativeSelectMultiWithArrayRef($query);
+            }
+            foreach my $row (@$rows) {
+                $$map{$$row[$first]} = $$row[$second];
+            }
+
+        } else {
+            my $rows;
+            if ($exec_args and @$exec_args) {
+                $rows = $self->nativeSelectMulti($query, $exec_args);
+            } else {
+                $rows = $self->nativeSelectMulti($query);
+            }
+            foreach my $row (@$rows) {
+                $$map{$$row{$first}} = $$row{$second};
+            }
+        }
+        
+        return $map;
+    }
+    *native_select_dyna_mapping = \&nativeSelectDynaMapping;
+
+=pod
+
+=head2 nativeSelectRecordMapping($query, \@exec_args)
+
+ Similar to nativeSelectMapping(), except the values in the hash
+ are references to the corresponding record (as a hash).
+
+=cut
+    sub nativeSelectRecordMapping {
+        my ($self, $query, $exec_args) = @_;
+
+        if ($exec_args and @$exec_args) {
+            return $self->nativeSelectRecordDynaMapping($query, 0, $exec_args);
+        } else {
+            return $self->nativeSelectRecordDynaMapping($query, 0);
+        }
+    }
+    *native_select_record_mapping = \&nativeSelectRecordMapping;
+
+=pod
+
+=head2 nativeSelectRecordDynaMapping($query, $col, \@exec_args)
+
+ Similar to nativeSelectRecordMapping(), except you specify
+ which column is the key in each key/value pair in the hash.  If
+ $col starts with a digit, then it is assumed to contain the
+ index for the column you wish to use.  Otherwise, $col is
+ assumed to contain the field name for the two columns you wish
+ to use.
+
+=cut
+    # FIXME: return undef on error
+    sub nativeSelectRecordDynaMapping {
+        my ($self, $query, $col, $exec_args) = @_;
+
+        my $map = {};
+        if ($col =~ /^\d/) {
+            my $rows;
+            if ($exec_args and @$exec_args) {
+                $rows = $self->nativeSelectMulti($query, $exec_args);
+            } else {
+                $rows = $self->nativeSelectMulti($query);
+            }
+            my $names = $$self{_last_col_names};
+            my $col_name = $$names[$col];
+            foreach my $row (@$rows) {
+                $$map{$$row{$col_name}} = $row;
+            }
+
+        } else {
+            my $rows;
+            if ($exec_args and @$exec_args) {
+                $rows = $self->nativeSelectMulti($query, $exec_args);
+            } else {
+                $rows = $self->nativeSelectMulti($query);
+            }
+            foreach my $row (@$rows) {
+                $$map{$$row{$col}} = $row;
+            }
+        }
+
+        return $map;
+    }
+    *native_select_record_dyna_mapping = \&nativeSelectRecordDynaMapping;
+    
     sub _getSqlObj {
         # return SQL::Abstract->new(case => 'textbook', cmp => '=', logic => 'and');
         require SQL::Abstract;
@@ -475,6 +772,19 @@ you to loop through one result at a time, e.g.,
         my $id = $$row{id};
     }
 
+    To get the number of rows selected, you can call the
+    rowCountCurrent() method on the loop object, e.g.,
+
+    my $loop = $db->nativeSelectLoop("SELECT * FROM my_table");
+    my $rows_in_result = $loop->rowCountCurrent;
+
+    The count() method is an alias for rowCountCurrent().
+
+
+    To get the number of rows returned by next() so far, use the
+    rowCountTotal() method.
+
+
 =cut
     sub nativeSelectLoop {
         my ($self, $query, $exec_args) = @_;
@@ -502,33 +812,17 @@ the methods provided by this module don't take into account.
     sub nativeQuery {
         my ($self, $query, $exec_args) = @_;
 
+        my $sth;
         if (scalar(@_) == 3) {
-            $exec_args = [ $exec_args ] unless ref($exec_args);
+            $sth = $self->_getStatementHandleForQuery($query, $exec_args);
+        } else {
+            $sth = $self->_getStatementHandleForQuery($query);
         }
-        $exec_args = [] unless $exec_args;
-
-        $self->_printDebug($query);
-
-        my $dbh = $self->_getDatabaseHandle;
-        my $sth = $dbh->prepare($query);
-        unless ($sth) {
-            if ($self->_isDebugOn) {
-                $self->_printDebug(Carp::longmess($dbh->errstr) . "\nQuery was '$query'\n");
-            }
-            return $self->setErr(0, $dbh->errstr);
-        }
-        my $rv = $sth->execute(@$exec_args);
-        unless ($rv) {
-            if ($self->_isDebugOn) {
-                $self->_printDebug(Carp::longmess($dbh->errstr) . "\nQuery was '$query'\n");
-            } else {
-                $self->_printDbiError("\nQuery was '$query'\n");
-            }
-            return $self->setErr(1, $dbh->errstr);
-        }
+        return $sth unless $sth;
+        my $rows = $sth->rows;
         $sth->finish;
 
-        return $rv;
+        return $rows == 0 ? "0E0" : $rows;
     }
 
     *doQuery = \&nativeQuery;
@@ -790,7 +1084,23 @@ $db->setNameArg('NAME').
 
     sub getErrorNum {
         my ($self) = @_;
-        return $$self{_err_str};
+        return $$self{_err_num};
+    }
+
+=pod
+
+=head2 err()
+
+Calls err() on the underlying DBI object, which returns the
+native database engine error code from the last driver method
+called.
+
+=cut
+    sub err {
+        my ($self) = @_;
+        my $dbh = $self->_getDatabaseHandle;
+        return $dbh->err if $dbh;
+        return 0;
     }
     
     sub _getAttr {
@@ -872,21 +1182,56 @@ transactions.
         return undef;
     }
 
+=pod
 
-    ###############################################################################
-    # stuff that I don't know if I want to make public yet
+=head2 ping()
 
-    # MySQL specific.  May be able to generalize to other dbs
-    # with using serial types if given table name and column name
-    sub getLastInsertId {
-        my ($self, $table_name, $col_name) = @_;
-        my $query = qq{SELECT LAST_INSERT_ID() AS id};
-        my $row = $self->nativeSelect($query);
-        if ($row and %$row) {
-            return $$row{id};
-        }
-        return undef;
+Calls ping() on the underlying DBI object to see if the database
+connection is still up.
+
+=cut
+    sub ping {
+        my ($self) =@_;
+        my $dbh = $self->_getDatabaseHandle;
+        return undef unless $dbh;
+
+        return $dbh->ping;
     }
+
+# =pod
+
+# =head2 getLastInsertId($catalog, $schema, $table, $field, \%attr)
+
+# Returns a value identifying the row just inserted, if possible.
+# If using DBI version 1.38 or later, this method calls
+# last_insert_id() on the underlying DBI object.  Otherwise, does a
+# "SELECT LAST_INSERT_ID()", which is MySQL specific.  The
+# parameters passed to this method are driver-specific.  See the
+# documentation on DBI for details.
+
+# get_last_insert_id() and last_insert_id() are aliases for this
+# method.
+
+# =cut
+
+    # bah, DBI's last_insert_id is not working for me, so for
+    # now this will be MySQL only
+    sub getLastInsertId {
+        my ($self, $catalog, $schema, $table, $field, $attr) = @_;
+        if (0 and DBI->VERSION >= 1.38) {
+            my $dbh = $self->_getDatabaseHandle;
+            return $dbh->last_insert_id($catalog, $schema, $table, $field, $attr);
+        } else {
+            my $query = qq{SELECT LAST_INSERT_ID() AS id};
+            my $row = $self->nativeSelect($query);
+            if ($row and %$row) {
+                return $$row{id};
+            }
+            return undef;
+        }
+    }
+    *get_last_insert_id = \&getLastInsertId;
+    *last_insert_id = \&getLastInsertId;
 
 }
 
@@ -905,11 +1250,9 @@ __END__
 
 =over 4
 
-=item Allow creation from existing DBI handle.
+=item More logging/debugging options
 
-=item Logging
-
-=item Allow prepare() and execute()
+=item Allow prepare() and execute() for easier integration into existing code.
 
 =back
 
@@ -917,8 +1260,8 @@ __END__
 
     People who have contributed ideas and/or code for this module:
 
-    Mark Stosberg
     Kevin Wilson
+    Mark Stosberg
 
 =head1 AUTHOR
 
@@ -934,6 +1277,6 @@ __END__
 
 =head1 VERSION
 
-    0.07
+    0.08
 
 =cut
