@@ -2,7 +2,7 @@
 # Creation date: 2003-03-30 12:17:42
 # Authors: Don
 # Change log:
-# $Id: Wrapper.pm,v 1.50 2005/03/06 00:02:48 don Exp $
+# $Id: Wrapper.pm,v 1.51 2005/03/14 16:43:51 don Exp $
 #
 # Copyright (c) 2003-2005 Don Owens
 #
@@ -120,7 +120,7 @@ use strict;
     $Heavy = 0;
 
     BEGIN {
-        $VERSION = '0.14'; # update below in POD as well
+        $VERSION = '0.15'; # update below in POD as well
     }
 
     use DBI;
@@ -2289,6 +2289,6 @@ __END__
 
 =head1 VERSION
 
-    0.14
+    0.15
 
 =cut

@@ -3,7 +3,7 @@
 # Creation date: 2003-03-30 17:52:14
 # Authors: Don
 # Change log:
-# $Id: Makefile.PL,v 1.12 2005/03/05 21:32:42 don Exp $
+# $Id: Makefile.PL,v 1.13 2005/03/14 16:43:51 don Exp $
 
 use strict;
 use Carp;
@@ -25,7 +25,7 @@ use Carp;
                           'lib/DBIx/Wrapper/SQLCommand.pm' => '$(INST_LIBDIR)/Wrapper/SQLCommand.pm',
                           'lib/DBIx/Wrapper/StatementLoop.pm' => '$(INST_LIBDIR)/Wrapper/StatementLoop.pm',
                           'lib/DBIx/Wrapper/Statement.pm' => '$(INST_LIBDIR)/Wrapper/Statement.pm',
-                          'lib/DBIx/Wrapper/Statement.pm' => '$(INST_LIBDIR)/Wrapper/Delegator.pm',
+                          'lib/DBIx/Wrapper/Delegator.pm' => '$(INST_LIBDIR)/Wrapper/Delegator.pm',
                         },
                   dist => { COMPRESS => 'gzip -9f', SUFFIX => 'gz' },
                   DIR => [],
