@@ -2,21 +2,24 @@
 # Creation date: 2003-03-30 15:24:44
 # Authors: Don
 # Change log:
-# $Id: StatementLoop.pm,v 1.1 2003/03/31 01:47:12 don Exp $
+# $Id: StatementLoop.pm,v 1.2 2004/01/15 00:33:19 don Exp $
 
 use strict;
 
 {   package DBIx::Wrapper::StatementLoop;
 
     use vars qw($VERSION);
-    $VERSION = do { my @r=(q$Revision: 1.1 $=~/\d+/g); sprintf "%d."."%02d"x$#r,@r };
+    $VERSION = do { my @r=(q$Revision: 1.2 $=~/\d+/g); sprintf "%d."."%02d"x$#r,@r };
 
     use base 'DBIx::Wrapper::Statement';
 
     sub new {
         my ($proto, $parent, $query) = @_;
-        my $sth = $parent->_getDatabaseHandle()->prepare($query)
-            or return $parent->setErr(0, $DBI::errstr);
+        my $sth = $parent->_getDatabaseHandle()->prepare($query);
+        unless ($sth) {
+            $parent->_printDbiError("\nQuery was '$query'\n");
+            return $parent->setErr(0, $DBI::errstr);
+        }
         my $self = bless {}, ref($proto) || $proto;
         $self->_setSth($sth);
         return $self;
@@ -71,6 +74,6 @@ DBIx::Wrapper::StatementLoop -
 
 =head1 VERSION
 
-$Id: StatementLoop.pm,v 1.1 2003/03/31 01:47:12 don Exp $
+$Id: StatementLoop.pm,v 1.2 2004/01/15 00:33:19 don Exp $
 
 =cut

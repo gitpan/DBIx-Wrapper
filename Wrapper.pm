@@ -2,7 +2,7 @@
 # Creation date: 2003-03-30 12:17:42
 # Authors: Don
 # Change log:
-# $Id: Wrapper.pm,v 1.13 2003/10/21 05:11:15 don Exp $
+# $Id: Wrapper.pm,v 1.14 2004/01/15 00:33:19 don Exp $
 #
 # All rights reserved. This program is free software; you can
 # redistribute it and/or modify it under the same terms as Perl
@@ -41,7 +41,7 @@ use strict;
     use vars qw($VERSION);
 
     BEGIN {
-        $VERSION = '0.05'; # update below in POD as well
+        $VERSION = '0.06'; # update below in POD as well
     }
 
     use DBI;
@@ -73,9 +73,14 @@ An alias for connect().
         my $self = $proto->_new;
 
         my $dbh = DBI->connect($data_source, $username, $auth, $attr);
+        unless (ref($attr) eq 'HASH' and defined($$attr{PrintError}) and not $$attr{PrintError}) {
+            $self->addDebugLevel(2); # print on error
+        }
         unless ($dbh) {
             if ($self->_isDebugOn) {
                 $self->_printDebug(Carp::longmess($DBI::errstr));
+            } else {
+                $self->_printDbiError;
             }
             return undef;
         }
@@ -91,6 +96,15 @@ An alias for connect().
     }
 
     *new = \&connect;
+
+    sub addDebugLevel {
+        my ($self, $level) = @_;
+        $$self{_debug_level} |= $level;
+    }
+
+    sub getDebugLevel {
+        return shift()->{_debug_level};
+    }
 
 =pod
 
@@ -153,6 +167,8 @@ Return the underlying DBI object used to query the database.
         unless ($sth) {
             if ($self->_isDebugOn) {
                 $self->_printDebug(Carp::longmess($dbh->errstr) . "\nQuery was '$query'\n");
+            } else {
+                $self->_printDbiError("\nQuery was '$query'\n");
             }
             return $self->setErr(0, $dbh->errstr);
         }
@@ -160,6 +176,8 @@ Return the underlying DBI object used to query the database.
         unless ($rv) {
             if ($self->_isDebugOn) {
                 $self->_printDebug(Carp::longmess($dbh->errstr) . "\nQuery was '$query'\n");
+            } else {
+                $self->_printDbiError("\nQuery was '$query'\n");
             }
             return $self->setErr(1, $dbh->errstr);
         }
@@ -238,6 +256,8 @@ the row(s) in the database.
         unless ($sth) {
             if ($self->_isDebugOn) {
                 $self->_printDebug(Carp::longmess($dbh->errstr) . "\nQuery was '$query'\n");
+            } else {
+                $self->_printDbiError("\nQuery was '$query'\n");
             }
             return $self->setErr(0, $dbh->errstr);
         }
@@ -246,6 +266,8 @@ the row(s) in the database.
         unless ($rv) {
             if ($self->_isDebugOn) {
                 $self->_printDebug(Carp::longmess($dbh->errstr) . "\nQuery was '$query'\n");
+            } else {
+                $self->_printDbiError("\nQuery was '$query'\n");
             }
             return $self->setErr(1, $dbh->errstr);
         }
@@ -310,6 +332,8 @@ execute() called on a DBI object.
         unless ($sth) {
             if ($self->_isDebugOn) {
                 $self->_printDebug(Carp::longmess($dbh->errstr) . "\nQuery was '$query'\n");
+            } else {
+                $self->_printDbiError("\nQuery was '$query'\n");
             }
             return $self->setErr(0, $dbh->errstr);
         }
@@ -317,6 +341,8 @@ execute() called on a DBI object.
         unless ($rv) {
             if ($self->_isDebugOn) {
                 $self->_printDebug(Carp::longmess($dbh->errstr) . "\nQuery was '$query'\n");
+            } else {
+                $self->_printDbiError("\nQuery was '$query'\n");
             }
             return $self->setErr(1, $dbh->errstr);
         }
@@ -352,6 +378,8 @@ each row is a hash representing a row of the result.
         unless ($sth) {
             if ($self->_isDebugOn) {
                 $self->_printDebug(Carp::longmess($dbh->errstr) . "\nQuery was '$query'\n");
+            } else {
+                $self->_printDbiError("\nQuery was '$query'\n");
             }
             return $self->setErr(0, $dbh->errstr);
         }
@@ -360,6 +388,8 @@ each row is a hash representing a row of the result.
         unless ($rv) {
             if ($self->_isDebugOn) {
                 $self->_printDebug(Carp::longmess($dbh->errstr) . "\nQuery was '$query'\n");
+            } else {
+                $self->_printDbiError("\nQuery was '$query'\n");
             }
             return $self->setErr(1, $dbh->errstr);
         }
@@ -434,6 +464,8 @@ the methods provided by this module don't take into account.
         unless ($rv) {
             if ($self->_isDebugOn) {
                 $self->_printDebug(Carp::longmess($dbh->errstr) . "\nQuery was '$query'\n");
+            } else {
+                $self->_printDbiError("\nQuery was '$query'\n");
             }
             return $self->setErr(1, $dbh->errstr);
         }
@@ -528,6 +560,46 @@ Turns off debugging output.
             return 1;
         }
         return undef;
+    }
+
+    sub _printDbiError {
+        my ($self, $extra) = @_;
+
+        return undef unless ($self->getDebugLevel | 2);
+
+        my $str = Carp::longmess($DBI::errstr);
+
+        $str .= $extra if defined($extra);
+        
+        my $fh = $$self{_debug_fh};
+        $fh = \*STDERR unless $fh;
+        
+        my $time = $self->_getCurDateTime;
+
+        my ($package, $filename, $line, $subroutine, $hasargs,
+            $wantarray, $evaltext, $is_require, $hints, $bitmask);
+
+        my $frame = 1;
+        my $this_pkg = __PACKAGE__;
+
+        ($package, $filename, $line, $subroutine, $hasargs,
+         $wantarray, $evaltext, $is_require, $hints, $bitmask) = caller($frame);
+        while ($package eq $this_pkg) {
+            $frame++;
+            ($package, $filename, $line, $subroutine, $hasargs,
+             $wantarray, $evaltext, $is_require, $hints, $bitmask) = caller($frame);
+
+            # if we get more than 10 something must be wrong
+            last if $frame >= 10;
+        }
+
+        my @one_more = caller($frame + 1);
+        $subroutine = $one_more[3];
+        $subroutine = '' unless defined($subroutine);
+        $subroutine .= '()' if $subroutine ne '';
+        
+        print $fh '*' x 60, "\n", "$time:$filename:$line:$subroutine\n", $str, "\n";
+
     }
     
     sub _printDebug {
@@ -789,6 +861,6 @@ __END__
 
 =head1 VERSION
 
-    0.05
+    0.06
 
 =cut
