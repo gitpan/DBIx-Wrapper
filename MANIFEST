@@ -1,0 +1,9 @@
+MANIFEST
+README
+Makefile.PL
+Wrapper.pm
+Wrapper/SelectLoop.pm
+Wrapper/SQLCommand.pm
+Wrapper/StatementLoop.pm
+Wrapper/Statement.pm
+t/00use.t
