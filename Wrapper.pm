@@ -2,7 +2,7 @@
 # Creation date: 2003-03-30 12:17:42
 # Authors: Don
 # Change log:
-# $Id: Wrapper.pm,v 1.11 2003/04/04 06:30:24 don Exp $
+# $Id: Wrapper.pm,v 1.12 2003/06/25 05:39:34 don Exp $
 #
 # All rights reserved. This program is free software; you can
 # redistribute it and/or modify it under the same terms as Perl
@@ -37,7 +37,7 @@ use strict;
     use vars qw($VERSION);
 
     BEGIN {
-        $VERSION = 0.03; # update below in POD as well
+        $VERSION = 0.04; # update below in POD as well
     }
 
     use DBI;
@@ -337,7 +337,11 @@ you to loop through one result at a time, e.g.,
         my ($self, $query, $exec_args) = @_;
         $self->_printDebug($query);
 
-        return DBIx::Wrapper::SelectLoop->new($self, $query, $exec_args);
+        if (scalar(@_) == 3) {
+            return DBIx::Wrapper::SelectLoop->new($self, $query, $exec_args);
+        } else {
+            return DBIx::Wrapper::SelectLoop->new($self, $query);
+        }
     }
 
     *readLoop = \&nativeSelectLoop;
@@ -631,6 +635,39 @@ $db->setNameArg('NAME').
         $$self{_should_disconnect} = 1;
     }
 
+=pod
+
+=head2 commit()
+
+Calls commit() on the underlying DBI object to commit your
+transactions.
+
+=cut
+    sub commit {
+        my ($self) = @_;
+        my $dbh = $self->_getDatabaseHandle;
+        if ($dbh) {
+            return $dbh->commit;
+        }
+        return undef;
+    }
+
+
+    ###############################################################################
+    # stuff that I don't know if I want to make public yet
+
+    # MySQL specific.  May be able to generalize to other dbs
+    # with using serial types if given table name and column name
+    sub getLastInsertId {
+        my ($self, $table_name, $col_name) = @_;
+        my $query = qq{SELECT LAST_INSERT_ID() AS id};
+        my $row = $self->nativeSelect($query);
+        if ($row and %$row) {
+            return $$row{id};
+        }
+        return undef;
+    }
+
 }
 
 1;
@@ -670,6 +707,6 @@ __END__
 
 =head1 VERSION
 
-    0.03
+    0.04
 
 =cut
