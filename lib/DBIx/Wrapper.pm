@@ -2,7 +2,7 @@
 # Creation date: 2003-03-30 12:17:42
 # Authors: Don
 # Change log:
-# $Id: Wrapper.pm,v 1.26 2004/05/05 03:58:10 don Exp $
+# $Id: Wrapper.pm,v 1.28 2004/06/03 06:49:36 don Exp $
 #
 # Copyright (c) 2003-2004 Don Owens
 #
@@ -42,6 +42,7 @@ DBIx::Wrapper - A wrapper around the DBI
  }
 
  my $row = $db->nativeSelectWithArrayRef($query, \@exec_args);
+
  my $rows = $db->nativeSelectMulti($query, \@exec_args);
 
  my $loop = $db->nativeSelectMultiExecLoop($query)
@@ -97,7 +98,7 @@ use strict;
     use vars qw($VERSION);
 
     BEGIN {
-        $VERSION = '0.08'; # update below in POD as well
+        $VERSION = '0.09'; # update below in POD as well
     }
 
     use DBI;
@@ -276,6 +277,78 @@ databases which support it.
         return $self->_insert_replace('REPLACE', $table, $data);
     }
 
+    # HERE - In progress
+    sub smartReplace {
+        my ($self, $table, $data, $keys) = @_;
+
+        if (0 and $keys) {
+            # ignore $keys for now
+            
+        } else {
+            my $dbh = $self->_getDatabaseHandle;
+            my $query = qq{DESCRIBE $table};
+            my $sth = $self->_getStatementHandleForQuery($query);
+            return $sth unless $sth;
+            my $auto_incr = undef;
+            my $key_list = [];
+            my $info_list = [];
+            while (my $info = $sth->fetchrow_hashref('NAME_lc')) {
+                push @$info_list, $info;
+                push @$key_list, $$info{field} if lc($$info{key}) eq 'pri';
+                if ($$info{extra} =~ /auto_increment/i) {
+                    $auto_incr = $$info{field};
+                }
+            }
+
+#             use Data::Dumper;
+#             print Data::Dumper->Dump([ $info_list ], [ 'info_list' ]) . "\n";
+
+#             print Data::Dumper->Dump([ $key_list ], [ 'key_list' ]) . "\n";
+
+            my $orig_auto_incr = $auto_incr;
+            $auto_incr = lc($auto_incr);
+            my $keys_provided = [];
+            my $key_hash = { map { (lc($_) => 1) } @$key_list };
+            my $auto_incr_provided = 0;
+            foreach my $key (keys %$data) {
+                push @$keys_provided, $key if exists($$key_hash{lc($key)});
+                if (lc($key) eq $auto_incr) {
+                    $auto_incr_provided = 1;
+                    last;
+                }
+            }
+
+#             use Data::Dumper;
+#             print Data::Dumper->Dump([ $keys_provided ], [ 'keys_provided' ]) . "\n";
+
+            # HERE
+            if (@$keys_provided) {
+                # do replace and return the value of this field
+                my $rv = $self->replace($table, $data);
+                return $rv unless $rv;
+                if ($orig_auto_incr eq '') {
+                    my %hash = map { ($_ => $$data{$_}) } @$keys_provided;
+                    my $row = $self->selectFromHash($table, \%hash);
+                    return $row if $row and %$row;
+                    return undef;
+                } else {
+                    return $$data{$orig_auto_incr};
+                }
+            } else {
+                # do insert and return last insert id
+                my $rv = $self->insert($table, $data);
+                return $rv unless $rv;
+                if ($orig_auto_incr eq '') {
+                    # FIXME: what do we do here?
+                    return 1;
+                } else {
+                    my $id = $self->getLastInsertId(undef, undef, $table, $orig_auto_incr);
+                    return $id;
+                }
+            }
+        }
+    }
+
 =pod
 
 =head2 update($table, \%keys, \%data), update($table, \@keys, \%data)
@@ -336,6 +409,25 @@ databases which support it.
         $sth->finish;
         
         return 1;
+    }
+
+    # HERE - In progress
+    sub selectFromHash {
+        my ($self, $table, $keys, $extra) = @_;
+        my @keys = keys %$keys;
+        my $where = join(" AND ", map { "$_=?" } @keys);
+
+        my $query = qq{SELECT * FROM $table WHERE $where};
+        my $sth = $self->_getStatementHandleForQuery($query, [ @$keys{@keys} ]);
+        my $info = $sth->fetchrow_hashref;
+        my $rv;
+        if ($info and %$info) {
+            $rv = $info; 
+        } else {
+            $rv = undef;
+        }
+        $sth->finish;
+        return $rv;
     }
 
 =pod
@@ -480,9 +572,11 @@ on error.
         
         return $sth unless $sth;
         
-        my $result = $sth->fetchrow_arrayref($self->getNameArg);
+        my $result = $sth->fetchrow_arrayref;
         $sth->finish;
 
+        return [] unless $result and ref($result) =~ /ARRAY/;
+        
         # have to make copy because recent version of DBI now
         # return the same array reference each time
         return [ @$result ];
@@ -1277,6 +1371,6 @@ __END__
 
 =head1 VERSION
 
-    0.08
+    0.09
 
 =cut

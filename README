@@ -26,6 +26,7 @@ SYNOPSIS
      }
 
      my $row = $db->nativeSelectWithArrayRef($query, \@exec_args);
+
      my $rows = $db->nativeSelectMulti($query, \@exec_args);
 
      my $loop = $db->nativeSelectMultiExecLoop($query)
@@ -294,5 +295,5 @@ COPYRIGHT
         itself.
 
 VERSION
-        0.08
+        0.09
 
