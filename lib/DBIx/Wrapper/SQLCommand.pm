@@ -2,14 +2,14 @@
 # Creation date: 2003-03-30 16:26:50
 # Authors: Don
 # Change log:
-# $Id: SQLCommand.pm,v 1.2 2003/04/02 06:22:02 don Exp $
+# $Id: SQLCommand.pm,v 1.3 2004/07/01 06:37:11 don Exp $
 
 use strict;
 
 {   package DBIx::Wrapper::SQLCommand;
 
     use vars qw($VERSION);
-    $VERSION = do { my @r=(q$Revision: 1.2 $=~/\d+/g); sprintf "%d."."%02d"x$#r,@r };
+    $VERSION = do { my @r=(q$Revision: 1.3 $=~/\d+/g); sprintf "%d."."%02d"x$#r,@r };
 
     sub new {
         my ($proto, $str) = @_;
@@ -34,7 +34,8 @@ __END__
 
 =head1 NAME
 
-DBIx::Wrapper::SQLCommand - 
+DBIx::Wrapper::SQLCommand - Used by DBIx::Wrapper to pass SQL
+as-is.  This is deprecated.  Use a scalar reference instead.
 
 =head1 SYNOPSIS
 
@@ -56,6 +57,6 @@ DBIx::Wrapper::SQLCommand -
 
 =head1 VERSION
 
-$Id: SQLCommand.pm,v 1.2 2003/04/02 06:22:02 don Exp $
+$Id: SQLCommand.pm,v 1.3 2004/07/01 06:37:11 don Exp $
 
 =cut

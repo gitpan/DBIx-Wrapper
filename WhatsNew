@@ -1,3 +1,11 @@
+Version 0.11
+        * $db->update() and $db->nativeQuery() now return the number
+          of rows affected by the query, if available.
+
+	* 'make test' no longer breaks when DBI is not installed.
+	  This was causing ActiveState Perl builds to fail and not be
+	  available on their site.
+
 Version 0.10
 	my $rv = $dbh->delete($table, \%keys)
         my $id = $dbh->getLastInsertId;

@@ -2,14 +2,14 @@
 # Creation date: 2003-03-30 15:25:00
 # Authors: Don
 # Change log:
-# $Id: SelectLoop.pm,v 1.5 2004/05/04 21:41:21 don Exp $
+# $Id: SelectLoop.pm,v 1.6 2004/07/01 06:37:11 don Exp $
 
 use strict;
 
 {   package DBIx::Wrapper::SelectLoop;
 
     use vars qw($VERSION);
-    $VERSION = do { my @r=(q$Revision: 1.5 $=~/\d+/g); sprintf "%d."."%02d"x$#r,@r };
+    $VERSION = do { my @r=(q$Revision: 1.6 $=~/\d+/g); sprintf "%d."."%02d"x$#r,@r };
 
     use base 'DBIx::Wrapper::Statement';
 
@@ -88,7 +88,7 @@ __END__
 
 =head1 NAME
 
-DBIx::Wrapper::SelectLoop - 
+DBIx::Wrapper::SelectLoop - Used by DBIx::Wrapper for SelectLoop methods
 
 =head1 SYNOPSIS
 
@@ -110,6 +110,6 @@ DBIx::Wrapper::SelectLoop -
 
 =head1 VERSION
 
-$Id: SelectLoop.pm,v 1.5 2004/05/04 21:41:21 don Exp $
+$Id: SelectLoop.pm,v 1.6 2004/07/01 06:37:11 don Exp $
 
 =cut

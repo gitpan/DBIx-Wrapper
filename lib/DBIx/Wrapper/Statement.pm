@@ -2,14 +2,14 @@
 # Creation date: 2003-03-30 15:23:31
 # Authors: Don
 # Change log:
-# $Id: Statement.pm,v 1.1 2003/03/31 01:47:12 don Exp $
+# $Id: Statement.pm,v 1.2 2004/07/01 06:37:12 don Exp $
 
 use strict;
 
 {   package DBIx::Wrapper::Statement;
 
     use vars qw($VERSION);
-    $VERSION = do { my @r=(q$Revision: 1.1 $=~/\d+/g); sprintf "%d."."%02d"x$#r,@r };
+    $VERSION = do { my @r=(q$Revision: 1.2 $=~/\d+/g); sprintf "%d."."%02d"x$#r,@r };
 
     sub new {
         my ($proto) = @_;
@@ -51,7 +51,7 @@ __END__
 
 =head1 NAME
 
-DBIx::Wrapper::Statement - 
+DBIx::Wrapper::Statement - Statement wrapper used by DBIx::Wrapper
 
 =head1 SYNOPSIS
 
@@ -73,6 +73,6 @@ DBIx::Wrapper::Statement -
 
 =head1 VERSION
 
-$Id: Statement.pm,v 1.1 2003/03/31 01:47:12 don Exp $
+$Id: Statement.pm,v 1.2 2004/07/01 06:37:12 don Exp $
 
 =cut

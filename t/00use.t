@@ -3,7 +3,7 @@
 # Creation date: 2003-03-05 07:42:25
 # Authors: Don
 # Change log:
-# $Id: 00use.t,v 1.1 2003/03/31 01:56:00 don Exp $
+# $Id: 00use.t,v 1.2 2004/07/01 06:37:12 don Exp $
 
 use strict;
 
@@ -11,9 +11,23 @@ use strict;
 {
     use strict;
     use Test;
-    BEGIN { plan tests => 1 }
-    
-    use DBIx::Wrapper; ok(1);
+
+    use vars qw($Skip);
+    BEGIN { eval 'use DBIx::Wrapper';
+            if ($@) {
+                plan tests => 1;
+                print STDERR "\n\n  " . '=' x 10 . '> ';
+                print STDERR "Skipping tests because DBI is not installed.\n";
+                print STDERR "  " . '=' x 10 . '> ';
+                print STDERR "You must install DBI before this module will work.\n\n";
+                $Skip = 1;
+            } else {
+                plan tests => 1;
+                $Skip = 0;
+            }
+        }
+        
+    eval 'use DBIx::Wrapper'; skip($Skip, ($Skip ? 1 : not $@));
 
 }
 

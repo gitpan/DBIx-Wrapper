@@ -2,7 +2,7 @@
 # Creation date: 2003-03-30 12:17:42
 # Authors: Don
 # Change log:
-# $Id: Wrapper.pm,v 1.32 2004/06/08 17:24:53 don Exp $
+# $Id: Wrapper.pm,v 1.33 2004/07/01 06:37:11 don Exp $
 #
 # Copyright (c) 2003-2004 Don Owens
 #
@@ -104,7 +104,7 @@ use strict;
     use vars qw($VERSION);
 
     BEGIN {
-        $VERSION = '0.10'; # update below in POD as well
+        $VERSION = '0.11'; # update below in POD as well
     }
 
     use DBI;
@@ -472,11 +472,11 @@ databases which support it.
         my $where = join(" AND ", map { "$_=?" } @keys);
 
         my $query = qq{UPDATE $table SET $set WHERE $where};
-        my $sth = $self->_getStatementHandleForQuery($query, \@values);
+        my ($sth, $rv) = $self->_getStatementHandleForQuery($query, \@values);
         return $sth unless $sth;
         $sth->finish;
         
-        return 1;
+        return $rv;
     }
 
 =pod
@@ -556,7 +556,8 @@ is called, otherwise, insert() is called.
             } else {
                 $self->_printDbiError("\nQuery was '$query'\n");
             }
-            return $self->setErr(0, $dbh->errstr);
+            return wantarray ? ($self->setErr(0, $dbh->errstr), undef)
+                : $self->setErr(0, $dbh->errstr);
         }
 
         my $rv = $sth->execute(@$exec_args);
@@ -566,10 +567,11 @@ is called, otherwise, insert() is called.
             } else {
                 $self->_printDbiError("\nQuery was '$query'\n");
             }
-            return $self->setErr(1, $dbh->errstr);
+            return wantarray ? ($self->setErr(1, $dbh->errstr), undef)
+                : $self->setErr(1, $dbh->errstr);
         }
 
-        return $sth;
+        return wantarray ? ($sth, $rv) : $sth;
     }
 
 =pod
@@ -1009,16 +1011,14 @@ the methods provided by this module don't take into account.
         my ($self, $query, $exec_args) = @_;
 
         my $sth;
+        my $rv;
         if (scalar(@_) == 3) {
-            $sth = $self->_getStatementHandleForQuery($query, $exec_args);
+            ($sth, $rv) = $self->_getStatementHandleForQuery($query, $exec_args);
         } else {
-            $sth = $self->_getStatementHandleForQuery($query);
+            ($sth, $rv) = $self->_getStatementHandleForQuery($query);
         }
         return $sth unless $sth;
-        my $rows = $sth->rows;
-        $sth->finish;
-
-        return $rows == 0 ? "0E0" : $rows;
+        return $rv;
     }
 
     *doQuery = \&nativeQuery;
@@ -1482,6 +1482,6 @@ __END__
 
 =head1 VERSION
 
-    0.10
+    0.11
 
 =cut
