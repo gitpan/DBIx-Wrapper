@@ -2,7 +2,7 @@
 # Creation date: 2003-03-30 12:17:42
 # Authors: Don
 # Change log:
-# $Id: Wrapper.pm,v 1.51 2005/03/14 16:43:51 don Exp $
+# $Id: Wrapper.pm,v 1.53 2005/04/21 22:07:19 don Exp $
 #
 # Copyright (c) 2003-2005 Don Owens
 #
@@ -120,7 +120,7 @@ use strict;
     $Heavy = 0;
 
     BEGIN {
-        $VERSION = '0.15'; # update below in POD as well
+        $VERSION = '0.16'; # update below in POD as well
     }
 
     use DBI;
@@ -259,6 +259,15 @@ An alias for connect().
 
     *new = \&connect;
 
+=pod
+
+=head2 reconnect()
+
+Reconnect to the database using the same parameters that were
+given to the connect() method.  It does not try to disconnect
+before attempting to connect again.
+
+=cut
     sub reconnect {
         my $self = shift;
 
@@ -274,6 +283,23 @@ An alias for connect().
         }
     }
 
+=pod
+
+=head2 disconnect()
+
+Disconnect from the database.  This disconnects and frees up the
+underlying DBI object.
+
+=cut
+    sub disconnect {
+        my $self = shift;
+        my $dbi_obj = $self->{_dbh};
+        $dbi_obj->disconnect if $dbi_obj;
+        delete $self->{_dbh};
+
+        return 1;
+    }
+    
     sub _getDsnFromHash {
         my $self = shift;
         my $data_source = shift;
@@ -547,6 +573,10 @@ databases which support it.
         unless ($data and UNIVERSAL::isa($data, 'HASH')) {
             return $self->setErr(-1, 'DBIx::Wrapper: No values passed to update()');
         }
+
+        unless (%$data) {
+            return "0E";
+        }
         
         my @fields;
         my @values;
@@ -630,6 +660,10 @@ is called, otherwise, insert() is called.
 =cut
     sub smartUpdate {
         my ($self, $table, $keys, $data) = @_;
+        unless (ref($data) eq 'HASH' and %$data) {
+            return "0E";
+        }
+        
         my @keys = keys %$keys;
         my $where = join(" AND ", map { "$_=?" } @keys);
 
@@ -2289,6 +2323,6 @@ __END__
 
 =head1 VERSION
 
-    0.15
+    0.16
 
 =cut

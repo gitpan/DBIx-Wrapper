@@ -138,6 +138,15 @@ METHODS
   new($data_source, $username, $auth, \%attr, \%params)
     An alias for connect().
 
+  reconnect()
+    Reconnect to the database using the same parameters that were given to
+    the connect() method. It does not try to disconnect before attempting to
+    connect again.
+
+  disconnect()
+    Disconnect from the database. This disconnects and frees up the
+    underlying DBI object.
+
   newFromDBI($dbh)
     Returns a new DBIx::Wrapper object from a DBI object that has already
     been created. Note that when created this way, disconnect() will not be
@@ -492,5 +501,5 @@ COPYRIGHT
             itself.
 
 VERSION
-            0.15
+            0.16
 

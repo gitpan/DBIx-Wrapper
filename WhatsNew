@@ -1,3 +1,12 @@
+Version 0.16
+        * disconnect() method
+        * documented reconnect() method
+	* update() and smartUpdate() will now ignore (just return a
+	  true value) when called with empty $data
+
+Version 0.15
+        * Documented callbacks
+
 Version 0.14
         * The data_source argument to connect() can now be a hash
         * Unknown method calls will be passed to the underlying DBI
