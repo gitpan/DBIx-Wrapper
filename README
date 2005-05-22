@@ -147,6 +147,51 @@ METHODS
     Disconnect from the database. This disconnects and frees up the
     underlying DBI object.
 
+  connect_one(\@cfg_list, \%attr)
+     Connects to a random database out of the list.  This is useful
+     for connecting to a slave database out of a group for read-only
+     access.  Ths list should look similar to the following:
+
+        my $cfg_list = [ { driver => 'mysql',
+                           host => 'db0.example.com',
+                           port => 3306,
+                           database => 'MyDB',
+                           user => 'dbuser',
+                           auth => 'dbpwd',
+                           attr => { RaiseError => 1 },
+                           weight => 1,
+                         },
+                         { driver => 'mysql',
+                           host => 'db1.example.com',
+                           port => 3306,
+                           database => 'MyDB',
+                           user => 'dbuser',
+                           auth => 'dbpwd',
+                           attr => { RaiseError => 1 },
+                           weight => 2,
+                         },
+                       ];
+
+     where the weight fields are optional (defaulting to 1).  The
+     attr field is also optional and corresponds to the 4th argument
+     to DBI's connect() method.  The \%attr passed to this method is
+     an optional parameter specifying the defaults for \%attr to be
+     passed to the connect() method.  The attr field in the config
+     for each database in the list overrides any in the \%attr
+     parameter passed into the method.
+
+     You may also pass the DSN string for the connect() method as the
+     'dsn' field in each config instead of the separate driver, host,
+     port, and database fields, e.g.,
+
+        my $cfg_list = [ { dsn => 'dbi:mysql:host=db0.example.com;database=MyDB;port=3306',
+                           user => 'dbuser',
+                           auth => 'dbpwd',
+                           attr => { RaiseError => 1 },
+                           weight => 1,
+                         },
+                       ];
+
   newFromDBI($dbh)
     Returns a new DBIx::Wrapper object from a DBI object that has already
     been created. Note that when created this way, disconnect() will not be
@@ -501,5 +546,5 @@ COPYRIGHT
             itself.
 
 VERSION
-            0.16
+            0.17
 

@@ -2,7 +2,7 @@
 # Creation date: 2003-03-30 12:17:42
 # Authors: Don
 # Change log:
-# $Id: Wrapper.pm,v 1.53 2005/04/21 22:07:19 don Exp $
+# $Id: Wrapper.pm,v 1.56 2005/05/22 23:15:04 don Exp $
 #
 # Copyright (c) 2003-2005 Don Owens
 #
@@ -120,7 +120,7 @@ use strict;
     $Heavy = 0;
 
     BEGIN {
-        $VERSION = '0.16'; # update below in POD as well
+        $VERSION = '0.17'; # update below in POD as well
     }
 
     use DBI;
@@ -299,6 +299,110 @@ underlying DBI object.
 
         return 1;
     }
+
+=pod
+
+=head2 connect_one(\@cfg_list, \%attr)
+
+ Connects to a random database out of the list.  This is useful
+ for connecting to a slave database out of a group for read-only
+ access.  Ths list should look similar to the following:
+
+    my $cfg_list = [ { driver => 'mysql',
+                       host => 'db0.example.com',
+                       port => 3306,
+                       database => 'MyDB',
+                       user => 'dbuser',
+                       auth => 'dbpwd',
+                       attr => { RaiseError => 1 },
+                       weight => 1,
+                     },
+                     { driver => 'mysql',
+                       host => 'db1.example.com',
+                       port => 3306,
+                       database => 'MyDB',
+                       user => 'dbuser',
+                       auth => 'dbpwd',
+                       attr => { RaiseError => 1 },
+                       weight => 2,
+                     },
+                   ];
+
+ where the weight fields are optional (defaulting to 1).  The
+ attr field is also optional and corresponds to the 4th argument
+ to DBI's connect() method.  The \%attr passed to this method is
+ an optional parameter specifying the defaults for \%attr to be
+ passed to the connect() method.  The attr field in the config
+ for each database in the list overrides any in the \%attr
+ parameter passed into the method.
+
+ You may also pass the DSN string for the connect() method as the
+ 'dsn' field in each config instead of the separate driver, host,
+ port, and database fields, e.g.,
+
+    my $cfg_list = [ { dsn => 'dbi:mysql:host=db0.example.com;database=MyDB;port=3306',
+                       user => 'dbuser',
+                       auth => 'dbpwd',
+                       attr => { RaiseError => 1 },
+                       weight => 1,
+                     },
+                   ];
+
+=cut
+    sub connect_one {
+        my $proto = shift;
+        my $cfg_list = shift;
+        my $attr = shift || {};
+
+        return undef unless $cfg_list and @$cfg_list;
+
+        # make copy so we don't distrub the original datastructure
+        $cfg_list = [ @$cfg_list ];
+
+        my $db = 0;
+        while (not $db and scalar(@$cfg_list) > 0) {
+            my ($cfg, $index) = $proto->_pick_one($cfg_list);
+            my $this_attr = $cfg->{attr} || {};
+            $this_attr = { %$attr, %$this_attr };
+
+            eval {
+                local($SIG{__DIE__});
+                $db = $proto->connect($cfg->{dsn} || $cfg, $cfg->{user}, $cfg->{auth}, $this_attr);
+            };
+
+            splice(@$cfg_list, $index, 1) unless $db;
+        }
+
+        return $db;
+    }
+
+    sub _pick_one {
+        my $proto = shift;
+        my $cfg_list = shift;
+        return undef unless $cfg_list and @$cfg_list;
+
+        $cfg_list = [ grep { not defined($_->{weight}) or $_->{weight} != 0 } @$cfg_list ];
+        my $total_weight = 0;
+        foreach my $cfg (@$cfg_list) {
+            $total_weight += $cfg->{weight} || 1;
+        }
+
+        my $target = rand($total_weight);
+        
+        my $accumulated = 0;
+        my $pick;
+        my $index = 0;
+        foreach my $cfg (@$cfg_list) {
+            $accumulated += $cfg->{weight} || 1;
+            if ($target < $accumulated) {
+                $pick = $cfg;
+                last;
+            }
+            $index++;
+        }
+
+        return wantarray ? ($pick, $index) : $pick;
+    }
     
     sub _getDsnFromHash {
         my $self = shift;
@@ -309,7 +413,17 @@ underlying DBI object.
         push @dsn, "host=$$data_source{host}" if $data_source->{host};
         push @dsn, "port=$$data_source{port}" if $data_source->{port};
 
+        push @dsn, "mysql_connect_timeout=$$data_source{mysql_connect_timeout}"
+            if $data_source->{mysql_connect_timeout};
+
         my $driver = $data_source->{driver} || $data_source->{type};
+
+        if ($data_source->{timeout}) {
+            if ($driver eq 'mysql') {
+                push @dsn, "mysql_connect_timeout=$$data_source{timeout}";
+            }
+        }
+        
         return "dbi:$driver:" . join(';', @dsn);
     }
 
@@ -2323,6 +2437,6 @@ __END__
 
 =head1 VERSION
 
-    0.16
+    0.17
 
 =cut

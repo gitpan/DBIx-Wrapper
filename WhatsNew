@@ -1,3 +1,7 @@
+Version 0.17
+	* connect_one() method
+	* support for mysql's mysql_connect_timeout parameter
+
 Version 0.16
         * disconnect() method
         * documented reconnect() method
