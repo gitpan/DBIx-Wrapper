@@ -1,3 +1,8 @@
+Version 0.18
+	* selectFromHashMulti() method
+	* support for OR in selectFromHash() and selectFromHashMulti()
+	  by passing an array ref
+
 Version 0.17
 	* connect_one() method
 	* support for mysql's mysql_connect_timeout parameter

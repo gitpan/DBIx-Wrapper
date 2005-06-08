@@ -2,7 +2,7 @@
 # Creation date: 2003-03-30 12:17:42
 # Authors: Don
 # Change log:
-# $Id: Wrapper.pm,v 1.56 2005/05/22 23:15:04 don Exp $
+# $Id: Wrapper.pm,v 1.58 2005/06/08 05:04:25 don Exp $
 #
 # Copyright (c) 2003-2005 Don Owens
 #
@@ -46,6 +46,7 @@ DBIx::Wrapper - A wrapper around the DBI
  my $rv = $db->smartUpdate($table, \%keys, \%data);
 
  my $row = $db->selectFromHash($table, \%keys);
+ my $row = $db->selectFromHashMulti($table, \%keys);
  my $row = $db->nativeSelect($query, \@exec_args);
 
  my $loop = $db->nativeSelectExecLoop($query);
@@ -120,7 +121,7 @@ use strict;
     $Heavy = 0;
 
     BEGIN {
-        $VERSION = '0.17'; # update below in POD as well
+        $VERSION = '0.18'; # update below in POD as well
     }
 
     use DBI;
@@ -742,16 +743,31 @@ databases which support it.
  Select from table $table using the key/value pairs in %keys to
  specify the WHERE clause of the query.  Multiple key/value pairs
  are joined with 'AND' in the WHERE clause.  Returns a single row
- as a hashref.
+ as a hashref.  If %keys is empty or not passed, it is treated
+ as "SELECT * FROM $table" with no WHERE clause.
+
+ If a value in the %keys hash is an array ref, the resulting
+ query will search for records with any of those values. E.g.,
+
+   my $row = $db->selectFromHash('the_table', { id => [ 5, 6, 7 ] });
+
+ will result in a query like
+
+   SELECT * FROM the_table WHERE (id=5 OR id=6 OR id=7)
+
+ The call
+
+   my $row = $db->selectFromHash('the_table', { id => [ 5, 6, 7 ], the_val => 'ten' });
+
+ will result in a query like
+
+   SELECT * FROM the_table WHERE (id=5 OR id=6 OR id=7) AND the_val="ten"
 
 =cut
     sub selectFromHash {
         my ($self, $table, $keys, $extra) = @_;
-        my @keys = keys %$keys;
-        my $where = join(" AND ", map { "$_=?" } @keys);
-
-        my $query = qq{SELECT * FROM $table WHERE $where};
-        my $sth = $self->_getStatementHandleForQuery($query, [ @$keys{@keys} ]);
+        my $sth = $self->_get_statement_handle_for_select_from_hash($table, $keys);
+        return $sth unless $sth;
         my $info = $sth->fetchrow_hashref;
         my $rv;
         if ($info and %$info) {
@@ -762,6 +778,94 @@ databases which support it.
         $sth->finish;
         return $rv;
     }
+    *select_from_hash = \&selectFromHash;
+    
+    sub _get_statement_handle_for_select_from_hash {
+        my ($self, $table, $keys) = @_;
+        my $query;
+        
+        if ($keys and ((ref($keys) eq 'HASH' and %$keys) or (ref($keys) eq 'ARRAY' and @$keys))) {
+            my ($where, $exec_args) = $self->_get_clause_for_select_from_hash($keys);
+            my $query = qq{SELECT * FROM $table WHERE $where};
+            return $self->_getStatementHandleForQuery($query, $exec_args);
+
+#             my @keys = keys %$keys;
+#             my @values;
+#             my @where;
+#             foreach my $key (@keys) {
+                
+#             }
+#             my $where = join(" AND ", map { "$_=?" } @keys);
+#             $query = qq{SELECT * FROM $table WHERE $where};
+#             return $self->_getStatementHandleForQuery($query, [ @$keys{@keys} ]);
+        } else {
+            $query = qq{SELECT * FROM $table};
+            return $self->_getStatementHandleForQuery($query);
+        }
+    }
+
+    sub _get_clause_for_select_from_hash {
+        my $self = shift;
+        my $data = shift;
+        my $parent_key = shift;
+        my @values;
+        my @where;
+
+        if (ref($data) eq 'HASH') {
+            my @keys = sort keys %$data;
+            foreach my $key (@keys) {
+                my $val = $data->{$key};
+                if (ref($val)) {
+                    my ($clause, $exec_args) = $self->_get_clause_for_select_from_hash($val, $key);
+                    push @where, "($clause)";
+                    push @values, @$exec_args if $exec_args;
+                } else {
+                    push @where, "$key=?";
+                    push @values, $val;
+                }
+            }
+            my $where = join(" AND ", @where);
+            return wantarray ? ($where, \@values) : $where;
+        } elsif (ref($data) eq 'ARRAY') {
+            foreach my $val (@$data) {
+                if (ref($val)) {
+                    my ($clause, $exec_args) =
+                        $self->_get_clause_for_select_from_hash($val, $parent_key);
+                    push @where, "($clause)";
+                    push @values, @$exec_args if $exec_args;
+                } else {
+                    push @where, "$parent_key=?";
+                    push @values, $val;
+                }
+            }
+            my $where = join(" OR ", @where);
+            return wantarray ? ($where, \@values) : $where;
+        } else {
+            return wantarray ? ($data, []) : $data;
+        }
+    }
+    
+
+=pod
+
+=head2 selectFromHashMulti($table, \%keys)
+
+ Like selectFromHash(), but returns all rows in the result.
+ Returns a reference to an array of hashrefs.
+
+=cut
+    sub selectFromHashMulti {
+        my ($self, $table, $keys, $extra) = @_;
+        my $sth = $self->_get_statement_handle_for_select_from_hash($table, $keys);
+        return $sth unless $sth;
+        my $results = [];
+        while (my $info = $sth->fetchrow_hashref) {
+            push @$results, $info;
+        }
+        $sth->finish;
+        return $results;
+    }
+    *select_from_hash_multi = \&selectFromHashMulti;
 
 =pod
 
@@ -949,7 +1053,7 @@ is called, otherwise, insert() is called.
         my ($self, $query, $exec_args) = @_;
         
         if (scalar(@_) == 3) {
-            $exec_args = [ $exec_args ] unless ref($exec_args);
+            $exec_args = [ $exec_args ] unless ref($exec_args) eq 'ARRAY';
         }
         $exec_args = [] unless $exec_args;
 
@@ -2422,6 +2526,7 @@ __END__
 
     Kevin Wilson
     Mark Stosberg
+    David Bushong
 
 =head1 AUTHOR
 
@@ -2437,6 +2542,6 @@ __END__
 
 =head1 VERSION
 
-    0.17
+    0.18
 
 =cut

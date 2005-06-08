@@ -1,14 +1,14 @@
 # -*-perl-*-
 # Creation date: 2004-10-29 14:01:59
 # Authors: Don
-# $Id: Request.pm,v 1.4 2005/03/05 23:34:02 don Exp $
+# $Id: Request.pm,v 1.5 2005/05/26 00:16:48 don Exp $
 
 use strict;
 
 {   package DBIx::Wrapper::Request;
 
     use vars qw($VERSION);
-    $VERSION = do { my @r=(q$Revision: 1.4 $=~/\d+/g); sprintf "%d."."%02d"x$#r,@r };
+    $VERSION = do { my @r=(q$Revision: 1.5 $=~/\d+/g); sprintf "%d."."%02d"x$#r,@r };
 
     sub new {
         my $proto = shift;
@@ -31,12 +31,17 @@ use strict;
     }
 
     sub getExecArgs {
-        return shift()->{_exec_args};
+        return shift()->{_exec_args} || [];
     }
 
     sub setExecArgs {
         my $self = shift;
-        $self->{_exec_args} = shift;
+        my $args = shift;
+        if (ref($args) eq 'ARRAY') {
+            $self->{_exec_args} = $args;
+        } else {
+            $self->{_exec_args} = [ $args ];
+        }
     }
 
     sub getExecReturnValue {
@@ -276,6 +281,6 @@ __END__
 
 =head1 VERSION
 
-$Id: Request.pm,v 1.4 2005/03/05 23:34:02 don Exp $
+$Id: Request.pm,v 1.5 2005/05/26 00:16:48 don Exp $
 
 =cut

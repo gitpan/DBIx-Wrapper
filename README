@@ -30,6 +30,7 @@ SYNOPSIS
      my $rv = $db->smartUpdate($table, \%keys, \%data);
 
      my $row = $db->selectFromHash($table, \%keys);
+     my $row = $db->selectFromHashMulti($table, \%keys);
      my $row = $db->nativeSelect($query, \@exec_args);
 
      my $loop = $db->nativeSelectExecLoop($query);
@@ -250,7 +251,29 @@ METHODS
      Select from table $table using the key/value pairs in %keys to
      specify the WHERE clause of the query.  Multiple key/value pairs
      are joined with 'AND' in the WHERE clause.  Returns a single row
-     as a hashref.
+     as a hashref.  If %keys is empty or not passed, it is treated
+     as "SELECT * FROM $table" with no WHERE clause.
+
+     If a value in the %keys hash is an array ref, the resulting
+     query will search for records with any of those values. E.g.,
+
+       my $row = $db->selectFromHash('the_table', { id => [ 5, 6, 7 ] });
+
+     will result in a query like
+
+       SELECT * FROM the_table WHERE (id=5 OR id=6 OR id=7)
+
+     The call
+
+       my $row = $db->selectFromHash('the_table', { id => [ 5, 6, 7 ], the_val => 'ten' });
+
+     will result in a query like
+
+       SELECT * FROM the_table WHERE (id=5 OR id=6 OR id=7) AND the_val="ten"
+
+  selectFromHashMulti($table, \%keys)
+     Like selectFromHash(), but returns all rows in the result.
+     Returns a reference to an array of hashrefs.
 
   smartUpdate($table, \%keys, \%data)
     Same as update(), except that a check is first made to see if there are
@@ -534,6 +557,7 @@ ACKNOWLEDGEMENTS
 
             Kevin Wilson
             Mark Stosberg
+            David Bushong
 
 AUTHOR
             Don Owens <don@owensnet.com>
@@ -546,5 +570,5 @@ COPYRIGHT
             itself.
 
 VERSION
-            0.17
+            0.18
 
