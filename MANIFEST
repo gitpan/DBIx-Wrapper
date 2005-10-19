@@ -10,6 +10,7 @@ lib/DBIx/Wrapper/SQLCommand.pm
 lib/DBIx/Wrapper/StatementLoop.pm
 lib/DBIx/Wrapper/Statement.pm
 lib/DBIx/Wrapper/Delegator.pm
+lib/DBIx/Wrapper/DBIDelegator.pm
 t/00use.t
 WhatsNew
 META.yml                                 Module meta-data (added by MakeMaker)

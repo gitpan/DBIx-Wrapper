@@ -29,8 +29,10 @@ SYNOPSIS
      my $rv = $db->update($table, \%keys, \%data);
      my $rv = $db->smartUpdate($table, \%keys, \%data);
 
-     my $row = $db->selectFromHash($table, \%keys);
-     my $row = $db->selectFromHashMulti($table, \%keys);
+     my $row = $db->selectFromHash($table, \%keys, \@cols);
+     my $row = $db->selectFromHashMulti($table, \%keys, \@cols);
+     my $val = $db->selectValueFromHash($table, \%keys, $col);
+     my $vals = $db->selectValueFromHashMulti($table, \%keys, \@cols);
      my $row = $db->nativeSelect($query, \@exec_args);
 
      my $loop = $db->nativeSelectExecLoop($query);
@@ -56,6 +58,7 @@ SYNOPSIS
      my $hash = $db->nativeSelectRecordDynaMapping($query, $col, \@exec_args);
 
      my $val = $db->nativeSelectValue($query, \@exec_args);
+     my $vals = $db->nativeSelectValuesArray($query, \@exec_args);
 
      my $row = $db->abstractSelect($table, \@fields, \%where, \@order);
      my $rows = $db->abstractSelectMulti($table, \@fields, \%where, \@order);
@@ -80,6 +83,13 @@ SYNOPSIS
      $db->commit();
      $db->ping();
      $db->err();
+
+     Attributes
+
+     Attributes accessed in DBIx::Wrapper object via hash access are
+     passed on or retrieved from the underlying DBI object, e.g.,
+
+     $dbi_obj->{RaiseError} = 1
 
 DESCRIPTION
     DBIx::Wrapper provides a wrapper around the DBI that makes it a bit
@@ -247,12 +257,14 @@ METHODS
      are kept in the same order.  This is required to use the correct
      multi field indexes in some databases.
 
-  selectFromHash($table, \%keys);
+  selectFromHash($table, \%keys, \@cols);
      Select from table $table using the key/value pairs in %keys to
      specify the WHERE clause of the query.  Multiple key/value pairs
      are joined with 'AND' in the WHERE clause.  Returns a single row
-     as a hashref.  If %keys is empty or not passed, it is treated
-     as "SELECT * FROM $table" with no WHERE clause.
+     as a hashref.  If %keys is empty or not passed, it is treated as
+     "SELECT * FROM $table" with no WHERE clause.  @cols is a list of
+     columns you want back.  If nothing is passed in @cols, all
+     columns will be returned.
 
      If a value in the %keys hash is an array ref, the resulting
      query will search for records with any of those values. E.g.,
@@ -271,9 +283,27 @@ METHODS
 
        SELECT * FROM the_table WHERE (id=5 OR id=6 OR id=7) AND the_val="ten"
 
-  selectFromHashMulti($table, \%keys)
+     or, if a value was passed in for \@cols, e.g.,
+
+       my $row = $db->selectFromHash('the_table', { id => [ 5, 6, 7 ], the_val => 'ten' }, [ 'id' ]);
+
+     the resulting query would be
+
+       SELECT id FROM the_table WHERE (id=5 OR id=6 OR id=7) AND the_val="ten"
+
+  selectFromHashMulti($table, \%keys, \@cols)
      Like selectFromHash(), but returns all rows in the result.
      Returns a reference to an array of hashrefs.
+
+  selectValueFromHash($table, \%keys, $col)
+     Combination of nativeSelectValue() and selectFromHash().
+     Returns the first column from the result of a query given by
+     $table and %keys, as in selectFromHash().  $col is the column to
+     return.
+
+  selectValueFromHashMulti($table, \%keys, \@cols)
+     Like selectValueFromhash(), but returns the first column of all
+     rows in the result.
 
   smartUpdate($table, \%keys, \%data)
     Same as update(), except that a check is first made to see if there are
@@ -356,6 +386,11 @@ METHODS
      the result.  Returns undef on error or if there are no rows in
      the result.  Note this may be the same value returned for a NULL
      value in the result.
+
+  nativeSelectValuesArray($query, \@exec_args)
+     Like nativeSelectValue(), but return multiple values, e.g.,
+     return an array of ids for the query "SELECT id FROM WHERE
+     color_pref='red'".
 
   abstractSelect($table, \@fields, \%where, \@order)
     Same as nativeSelect() except uses SQL::Abstract to generate the SQL.
@@ -552,6 +587,9 @@ METHODS
   There are also underscore_separated versions of these methods.
             E.g., nativeSelectLoop() becomes native_select_loop()
 
+DEPENDENCIES
+            DBI
+
 ACKNOWLEDGEMENTS
             Others who have contributed ideas and/or code for this module:
 
@@ -562,13 +600,20 @@ ACKNOWLEDGEMENTS
 AUTHOR
             Don Owens <don@owensnet.com>
 
-COPYRIGHT
-            Copyright (c) 2003-2005 Don Owens
+LICENSE AND COPYRIGHT
+        Copyright (c) 2003-2005 Don Owens (don@owensnet.com). All rights
+        reserved.
 
-            All rights reserved. This program is free software; you can
-            redistribute it and/or modify it under the same terms as Perl
-            itself.
+        This free software; you can redistribute it and/or modify it under
+        the same terms as Perl itself. See perlartistic.
+
+        This program is distributed in the hope that it will be useful, but
+        WITHOUT ANY WARRANTY; without even the implied warranty of
+        MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+
+SEE ALSO
+            DBI
 
 VERSION
-            0.18
+            0.19
 

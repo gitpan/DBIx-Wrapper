@@ -1,3 +1,22 @@
+Version 0.19
+        * fixed delete() to return the number of rows affected instead of 1
+	* now requires Perl 5.6 or later
+	* getting/setting attributes now gets/sets the corresponding
+	  attribute in the underlying DBI object, e.g.,
+	  $num_reconnects = $dbh->{auto_reconnects_ok},
+          $dbh->{mysql_auto_reconnect} = 1, etc.
+	* attempting to access DBIx::Wrapper's internal data directly
+	  will no longer work -- you really shouldn't be doing that
+	  anyway :).  If you need to dump its internal data for
+	  debugging purposes, call the debug_dump() method.  It will
+	  return a string containing a dump using Data::Dumper.
+	* nativeSelectValuesArray()
+	* selectValueFromHash()
+	* selectValueFromHashMulti()
+	* added optional \@cols argument to selectFromHash() and selectFromHashMulti()
+        * smartUpdate now only queries for one column when checking to
+          see if a row exists (previously it did "SELECT *")
+
 Version 0.18
 	* selectFromHashMulti() method
 	* support for OR in selectFromHash() and selectFromHashMulti()

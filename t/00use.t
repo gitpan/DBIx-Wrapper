@@ -3,7 +3,7 @@
 # Creation date: 2003-03-05 07:42:25
 # Authors: Don
 # Change log:
-# $Id: 00use.t,v 1.3 2004/11/08 03:02:39 don Exp $
+# $Id: 00use.t,v 1.4 2005/10/19 04:34:08 don Exp $
 
 use strict;
 
@@ -12,9 +12,9 @@ use strict;
     use strict;
     use Test;
 
-#     BEGIN { plan tests => 1 }
+    # BEGIN { plan tests => 1 }
 
-#     use DBIx::Wrapper; ok(1);
+    # use DBIx::Wrapper; ok(1);
     
     use vars qw($Skip);
     BEGIN {
