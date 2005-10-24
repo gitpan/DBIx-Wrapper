@@ -3,7 +3,7 @@
 # Creation date: 2003-03-30 17:52:14
 # Authors: Don
 # Change log:
-# $Id: Makefile.PL,v 1.15 2005/10/19 04:34:08 don Exp $
+# $Id: Makefile.PL,v 1.16 2005/10/21 17:46:24 don Exp $
 
 use strict;
 use Carp;
@@ -33,7 +33,7 @@ use Carp;
                   EXE_FILES => [],
                   PREREQ_PM => {
                                 DBI => 0,
-                                'Scalar::Util' => 0,
+                                # 'Scalar::Util' => 0,
                                 # 'SQL::Abstract' => 0
                                },
                   );

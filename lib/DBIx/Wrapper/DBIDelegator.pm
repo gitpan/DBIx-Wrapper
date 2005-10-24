@@ -21,12 +21,22 @@ use warnings;
 package DBIx::Wrapper::DBIDelegator;
 
 use vars qw($VERSION);
-$VERSION = do { my @r=(q$Revision: 1.2 $=~/\d+/g); sprintf "%d."."%02d"x$#r,@r };
+$VERSION = do { my @r=(q$Revision: 1.3 $=~/\d+/g); sprintf "%d."."%02d"x$#r,@r };
 
-use Scalar::Util qw(refaddr);
+# use Scalar::Util qw(refaddr);
 use Carp qw(cluck);
 
 my %i_data;
+
+sub refaddr($) {
+    my $obj = shift;
+    my $pkg = ref($obj) or return undef;
+  bless $obj, 'DBIx::Wrapper::Fake';
+  my $i = int($obj);
+  bless $obj, $pkg;
+  return $i;
+}
+
 
 =pod
 

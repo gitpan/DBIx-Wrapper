@@ -2,13 +2,20 @@
 # Creation date: 2003-03-30 12:17:42
 # Authors: Don
 # Change log:
-# $Id: Wrapper.pm,v 1.64 2005/10/19 04:35:41 don Exp $
+# $Id: Wrapper.pm,v 1.67 2005/10/23 23:55:04 don Exp $
 #
 # Copyright (c) 2003-2005 Don Owens
 #
 # All rights reserved. This program is free software; you can
 # redistribute it and/or modify it under the same terms as Perl
 # itself.
+
+# Questions:
+# * When quoting tables, split on . or require more arguments for dbname, etc.?
+# * Convert named placeholders to normal ones or call the quote() method?
+#   For DBD::mysql, quote() calls mysql_real_escape_string(), looks like execute()
+#   calls mysql_stmt_bind_param in mysql 4.1
+    
 
 =pod
 
@@ -101,12 +108,31 @@ DBIx::Wrapper - A wrapper around the DBI
  $db->err();
 
 
- Attributes
+=head2 Attributes
 
  Attributes accessed in DBIx::Wrapper object via hash access are
  passed on or retrieved from the underlying DBI object, e.g.,
 
  $dbi_obj->{RaiseError} = 1
+
+=head2 Named Placeholders
+
+ All native* methods (except for nativeSelectExecLoop) support
+ named placeholders.  That is, instead of using ? as a
+ placeholder, you can use :name, where name is the name of a key
+ in the hash passed to the method.  To use named placeholders,
+ pass a hash reference containing the values in place of the
+ @exec_args argument.  E.g.,
+
+ my $row = $db->nativeSelect("SELECT * FROM test_table WHERE id=:id", { id => 1 });
+
+ :: in the query string gets converted to : so you can include
+ literal colons in the query.  :"var name" and :'var name' are
+ also supported so you can use variable names containing spaces.
+
+ The implementation uses ? as placeholders under the hood so that
+ quoting is done properly.  So if your database driver does not
+ support placeholders, named placeholders will not help you.
 
 =head1 DESCRIPTION
 
@@ -132,12 +158,12 @@ no warnings 'once';
 use vars qw($VERSION $AUTOLOAD $Heavy @CARP_NOT);
 
 use Carp ();
-use Scalar::Util qw(refaddr);
-    
+# use Scalar::Util qw(refaddr);
+
 $Heavy = 0;
 
 BEGIN {
-    $VERSION = '0.19';      # update below in POD as well
+    $VERSION = '0.20';      # update below in POD as well
 }
 
 use DBI;
@@ -151,6 +177,15 @@ use DBIx::Wrapper::Delegator;
 use DBIx::Wrapper::DBIDelegator;
 
 my %i_data;
+
+sub refaddr($) {
+    my $obj = shift;
+    my $pkg = ref($obj) or return undef;
+  bless $obj, 'DBIx::Wrapper::Fake';
+  my $i = int($obj);
+  bless $obj, $pkg;
+  return $i;
+}
 
 sub _new {
     my ($proto) = @_;
@@ -724,6 +759,21 @@ sub delete {
     return $rv;
 }
 
+sub _quote_field_name {
+    my $self = shift;
+    my $field = shift;
+
+    # FIXME: implement
+}
+
+# E.g., turn test_db.test_table into `test_db`.`test_table`
+sub _quote_table {
+    my $self = shift;
+    my $table = shift;
+
+    # FIXME: implement
+}
+
 =pod
 
 =head2 update($table, \%keys, \%data), update($table, \@keys, \%data)
@@ -790,6 +840,8 @@ sub update {
     my $set = join(",", @set);
     my $where = join(" AND ", map { "$_=?" } @keys);
 
+    # quote_identifier() method added to dBI in version 1.21 (Feb 2002)
+    
     my $query = qq{UPDATE $table SET $set WHERE $where};
     my ($sth, $rv) = $self->_getStatementHandleForQuery($query, \@values);
     return $sth unless $sth;
@@ -1174,12 +1226,50 @@ sub _heavyPostFetchHook {
     }
 }
 
+sub _bind_named_place_holders {
+    my $self = shift;
+    my $query = shift;
+    my $exec_args = shift;
+
+    my $dbi = $self->_getDatabaseHandle;
+    
+#     $query =~ s/(?<!:):([\'\"]?)(\w+)\1/$self->quote($exec_args->{$2})/eg;
+#     return wantarray ? ($query, []) : $query;
+
+    my @new_args;
+    # $query =~ s/(?<!:):([\'\"]?)(\w+)\1/push(@new_args, $exec_args->{$2}); '?'/eg;
+
+    # Convert :: to : instead of treating it as a placeholder
+    $query =~ s{(::)|:([\'\"]?)(\w+)\2}{
+        if (defined($1) and $1 eq '::' ) {
+            ':' . (defined $2 ? $2 : '') . (defined $3 ? $3 : '') . (defined $2 ? $2 : '')
+        }
+        else {
+            push(@new_args, $exec_args->{$3}); '?'
+        }
+    }eg;
+    
+    return wantarray ? ($query, \@new_args) : $query;
+
+}
+
 sub _getStatementHandleForQuery {
     my ($self, $query, $exec_args) = @_;
         
     if (scalar(@_) == 3) {
-        $exec_args = [ $exec_args ] unless ref($exec_args) eq 'ARRAY';
+        my $type = ref($exec_args);
+        if ($type eq 'HASH') {
+            # okay
+            ($query, $exec_args) = $self->_bind_named_place_holders($query, $exec_args);
+        }
+        elsif ($type eq 'ARRAY') {
+            # okay -- leave as is
+        }
+        else {
+            $exec_args = [ $exec_args ];
+        }
     }
+    
     $exec_args = [] unless $exec_args;
 
     $self->_printDebug($query);
@@ -1511,7 +1601,7 @@ sub nativeSelectDynaMapping {
     my $map = {};
     if ($first =~ /^\d/) {
         my $rows;
-        if ($exec_args and @$exec_args) {
+        if (scalar(@_) == 4) {
             $rows = $self->nativeSelectMultiWithArrayRef($query, $exec_args);
         } else {
             $rows = $self->nativeSelectMultiWithArrayRef($query);
@@ -1522,7 +1612,7 @@ sub nativeSelectDynaMapping {
 
     } else {
         my $rows;
-        if ($exec_args and @$exec_args) {
+        if (scalar(@_) == 4) {
             $rows = $self->nativeSelectMulti($query, $exec_args);
         } else {
             $rows = $self->nativeSelectMulti($query);
@@ -1548,7 +1638,7 @@ sub nativeSelectDynaMapping {
 sub nativeSelectRecordMapping {
     my ($self, $query, $exec_args) = @_;
 
-    if ($exec_args and @$exec_args) {
+    if (scalar(@_) == 3) {
         return $self->nativeSelectRecordDynaMapping($query, 0, $exec_args);
     } else {
         return $self->nativeSelectRecordDynaMapping($query, 0);
@@ -1576,7 +1666,7 @@ sub nativeSelectRecordDynaMapping {
     my $map = {};
     if ($col =~ /^\d/) {
         my $rows;
-        if ($exec_args and @$exec_args) {
+        if (scalar(@_) == 4) {
             $rows = $self->nativeSelectMulti($query, $exec_args);
         } else {
             $rows = $self->nativeSelectMulti($query);
@@ -1589,7 +1679,7 @@ sub nativeSelectRecordDynaMapping {
 
     } else {
         my $rows;
-        if ($exec_args and @$exec_args) {
+        if (scalar(@_) == 4) {
             $rows = $self->nativeSelectMulti($query, $exec_args);
         } else {
             $rows = $self->nativeSelectMulti($query);
@@ -1623,7 +1713,8 @@ sub _getSqlObj {
 sub nativeSelectValue {
     my ($self, $query, $exec_args) = @_;
     my $row;
-    if ($exec_args and UNIVERSAL::isa($exec_args, 'ARRAY')) {
+    
+    if (scalar(@_) == 3) {
         $row = $self->nativeSelectWithArrayRef($query, $exec_args);
     } else {
         $row = $self->nativeSelectWithArrayRef($query);
@@ -1650,7 +1741,7 @@ sub nativeSelectValuesArray {
     my ($self, $query, $exec_args) = @_;
 
     my $rows;
-    if ($exec_args and UNIVERSAL::isa($exec_args, 'ARRAY')) {
+    if (scalar(@_) == 3) {
         $rows = $self->nativeSelectMultiWithArrayRef($query, $exec_args);
     } else {
         $rows = $self->nativeSelectMultiWithArrayRef($query);
@@ -1830,7 +1921,7 @@ sub newCommand {
 
 =pod
 
-=head2 command($cmd_string)
+=head2 command($cmd_string), literal($cmd_string), sql_literal($cmd_string)
 
 This creates a literal SQL command for use in insert(), update(),
 and related methods, since if you simply put something like
@@ -1858,6 +1949,9 @@ sub command {
     my ($self, $str) = @_;
     return \$str;
 }
+
+*sql_literal = \&command;
+*literal = \&command;
 
 =pod
 
@@ -2277,11 +2371,18 @@ sub shouldBeHeavy {
     return undef;
 }
 
+# sub get_info {
+#     my ($self, $name) = @_;
+#     require DBI::Const::GetInfoType;
+#     my $dbh = $self->_getDatabaseHandle;
+#     return $dbh->get_info($DBI::Const::GetInfoType::GetInfoType{$name});
+# }
+
 sub get_info {
-    my ($self, $name) = @_;
-    require DBI::Const::GetInfoType;
+    my $self = shift;
+    my $name = shift;
     my $dbh = $self->_getDatabaseHandle;
-    return $dbh->get_info($DBI::Const::GetInfoType::GetInfoType{$name});
+    return $dbh->get_info($name);
 }
 
 =pod
@@ -2765,7 +2866,7 @@ PURPOSE.
 
 =head1 VERSION
 
-    0.19
+    0.20
 
 =cut
 

@@ -84,12 +84,29 @@ SYNOPSIS
      $db->ping();
      $db->err();
 
-     Attributes
-
+  Attributes
      Attributes accessed in DBIx::Wrapper object via hash access are
      passed on or retrieved from the underlying DBI object, e.g.,
 
      $dbi_obj->{RaiseError} = 1
+
+  Named Placeholders
+     All native* methods (except for nativeSelectExecLoop) support
+     named placeholders.  That is, instead of using ? as a
+     placeholder, you can use :name, where name is the name of a key
+     in the hash passed to the method.  To use named placeholders,
+     pass a hash reference containing the values in place of the
+     @exec_args argument.  E.g.,
+
+     my $row = $db->nativeSelect("SELECT * FROM test_table WHERE id=:id", { id => 1 });
+
+     :: in the query string gets converted to : so you can include
+     literal colons in the query.  :"var name" and :'var name' are
+     also supported so you can use variable names containing spaces.
+
+     The implementation uses ? as placeholders under the hood so that
+     quoting is done properly.  So if your database driver does not
+     support placeholders, named placeholders will not help you.
 
 DESCRIPTION
     DBIx::Wrapper provides a wrapper around the DBI that makes it a bit
@@ -457,7 +474,7 @@ METHODS
                    };
         $db->insert('my_doc_table', $data);
 
-  command($cmd_string)
+  command($cmd_string), literal($cmd_string), sql_literal($cmd_string)
     This creates a literal SQL command for use in insert(), update(), and
     related methods, since if you simply put something like "CUR_DATE()" as
     a value in the %data parameter passed to insert, the function will get
@@ -615,5 +632,5 @@ SEE ALSO
             DBI
 
 VERSION
-            0.19
+            0.20
 
