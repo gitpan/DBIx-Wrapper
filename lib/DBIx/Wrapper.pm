@@ -2,7 +2,7 @@
 # Creation date: 2003-03-30 12:17:42
 # Authors: Don
 # Change log:
-# $Id: Wrapper.pm,v 1.67 2005/10/23 23:55:04 don Exp $
+# $Id: Wrapper.pm,v 1.68 2005/12/08 05:08:58 don Exp $
 #
 # Copyright (c) 2003-2005 Don Owens
 #
@@ -12,9 +12,6 @@
 
 # Questions:
 # * When quoting tables, split on . or require more arguments for dbname, etc.?
-# * Convert named placeholders to normal ones or call the quote() method?
-#   For DBD::mysql, quote() calls mysql_real_escape_string(), looks like execute()
-#   calls mysql_stmt_bind_param in mysql 4.1
     
 
 =pod
@@ -163,7 +160,7 @@ use Carp ();
 $Heavy = 0;
 
 BEGIN {
-    $VERSION = '0.20';      # update below in POD as well
+    $VERSION = '0.21';      # update below in POD as well
 }
 
 use DBI;
@@ -340,7 +337,7 @@ sub connect {
 
     $self->_setErrorHandler($params->{error_handler}) if $params->{error_handler};
     $self->_setDebugHandler($params->{debug_handler}) if $params->{debug_handler};
-    $self->_setDbStyle($params->{db_style}) if exists($params->{db_style});
+    $self->_setDbStyle($params->{db_style}) if CORE::exists($params->{db_style});
     $self->_setHeavy(1) if $params->{heavy};
         
     my ($junk, $dbd_driver, @rest) = split /:/, $dsn;
@@ -544,6 +541,7 @@ DBI object when the DBIx::Wrapper object goes out of scope.
 =cut
 sub newFromDBI {
     my ($proto, $dbh) = @_;
+    return unless $dbh;
     my $self = $proto->_new;
     $self->_setDatabaseHandle($dbh);
     return $self;
@@ -587,9 +585,10 @@ sub _insert_replace {
         }
     }
 
-    my $fields = join(",", @fields);
+    my $fields = join(",", map { $self->_quote_field_name($_) } @fields);
     my $place_holders = join(",", @place_holders);
-    my $query = qq{$operation INTO $table ($fields) values ($place_holders)};
+    my $sf_table = $self->_quote_table($table);
+    my $query = qq{$operation INTO $sf_table ($fields) values ($place_holders)};
     my ($sth, $rv) = $self->_getStatementHandleForQuery($query, \@values);
     return $sth unless $sth;
     $sth->finish;
@@ -673,7 +672,7 @@ sub smartReplace {
         my $key_hash = { map { (lc($_) => 1) } @$key_list };
         my $auto_incr_provided = 0;
         foreach my $key (keys %$data) {
-            push @$keys_provided, $key if exists($$key_hash{lc($key)});
+            push @$keys_provided, $key if CORE::exists($$key_hash{lc($key)});
             if (lc($key) eq $auto_incr) {
                 $auto_incr_provided = 1;
                 last;
@@ -749,8 +748,10 @@ sub delete {
     }
     push @values, @$keys{@keys};
 
-    my $where = join(" AND ", map { "$_=?" } @keys);
-    my $query = qq{DELETE FROM $table WHERE $where};
+    my $sf_table = $self->_quote_table($table);
+
+    my $where = join(" AND ", map { "$_=?" } map { $self->_quote_field_name($_) } @keys);
+    my $query = qq{DELETE FROM $sf_table WHERE $where};
 
     my ($sth, $rv) = $self->_getStatementHandleForQuery($query, \@values);
     return $sth unless $sth;
@@ -759,11 +760,46 @@ sub delete {
     return $rv;
 }
 
+sub _get_quote_chars {
+    my $self = shift;
+    my $quote_cache = $self->_get_i_val('_quote_cache');
+    unless ($quote_cache) {
+        my $dbi = $self->_getDatabaseHandle;
+        $quote_cache = [ $dbi->get_info(29) || '"', # identifier quot char
+                         $dbi->get_info(41) || '.', # catalog name separator
+                         $dbi->get_info(114) || 1,  # catalog location
+                       ];
+        $self->_set_i_val('_quote_cache', $quote_cache);
+    }
+
+    return $quote_cache;
+}
+
+sub _get_identifier_quote_char {
+    return shift()->_get_quote_chars()->[0];
+}
+
+sub _get_catalog_separator {
+    return shift()->_get_quote_chars()->[1];
+}
+
 sub _quote_field_name {
     my $self = shift;
     my $field = shift;
 
-    # FIXME: implement
+    my $sep = $self->_get_catalog_separator;
+    my $sf_sep = quotemeta($sep);
+    my @parts = split(/$sf_sep/, $field);
+
+    my $quote_char = $self->_get_identifier_quote_char;
+    my $sf_quote_char = quotemeta($quote_char);
+
+    foreach my $part (@parts) {
+        $part =~ s/$sf_quote_char/$quote_char$quote_char/g;
+        $part = $quote_char . $part . $quote_char;
+    }
+
+    return join($sep, @parts);
 }
 
 # E.g., turn test_db.test_table into `test_db`.`test_table`
@@ -771,7 +807,18 @@ sub _quote_table {
     my $self = shift;
     my $table = shift;
 
-    # FIXME: implement
+    my $sep = $self->_get_catalog_separator;
+
+    my $parts;
+    if (ref($table) eq 'ARRAY') {
+        $parts = $table;
+    }
+    else {
+        my $sf_sep = quotemeta($sep);
+        $parts = [ split(/$sf_sep/, $table) ];
+    }
+    
+    return join($sep, map { $self->_quote_field_name($_) } @$parts);
 }
 
 =pod
@@ -805,19 +852,20 @@ sub update {
         return "0E";
     }
         
-    my @fields;
+    # my @fields;
     my @values;
     my @set;
 
     while (my ($field, $value) = each %$data) {
-        push @fields, $field;
+        # push @fields, $field;
+        my $sf_field = $self->_quote_field_name($field);
         if (UNIVERSAL::isa($value, 'DBIx::Wrapper::SQLCommand')) {
-            push @set, "$field=" . $value->asString;
+            push @set, "$sf_field=" . $value->asString;
         } elsif (ref($value) eq 'SCALAR') {
-            push @set, "$field=" . $$value;
+            push @set, "$sf_field=" . $$value;
         } else {
             $value = "" unless defined $value;
-            push @set, "$field=?";
+            push @set, "$sf_field=?";
             push @values, $value;
         }
     }
@@ -838,16 +886,38 @@ sub update {
     push @values, @$keys{@keys};
 
     my $set = join(",", @set);
-    my $where = join(" AND ", map { "$_=?" } @keys);
+    my $where = join(" AND ", map { "$_=?" } map { $self->_quote_field_name($_) } @keys);
 
-    # quote_identifier() method added to dBI in version 1.21 (Feb 2002)
-    
-    my $query = qq{UPDATE $table SET $set WHERE $where};
+    # quote_identifier() method added to DBI in version 1.21 (Feb 2002)
+
+    my $sf_table = $self->_quote_table($table);
+    my $query = qq{UPDATE $sf_table SET $set WHERE $where};
     my ($sth, $rv) = $self->_getStatementHandleForQuery($query, \@values);
     return $sth unless $sth;
     $sth->finish;
         
     return $rv;
+}
+
+=pod
+
+=head2 exists($table, \%keys)
+
+ Returns true if one or more records exist with the given column
+ values in %keys.  %keys can be recursive as in the
+ selectFromHash() method.
+
+=cut
+sub exists {
+    my $self = shift;
+    my $table = shift;
+    my $keys = shift;
+
+    my $row = $self->select_from_hash($table, $keys, [ keys %$keys ]->[0]);
+    if ($row and %$row) {
+        return 1;
+    }
+    return;
 }
 
 =pod
@@ -913,18 +983,19 @@ sub _get_statement_handle_for_select_from_hash {
     my $col_list = '*';
     if (ref($cols) eq 'ARRAY') {
         if (@$cols) {
-            $col_list = join(',', @$cols);
+            $col_list = join(',', map { $self->_quote_field_name($_) } @$cols);
         }
     } elsif (defined($cols) and $cols ne '') {
-        $col_list = $cols;
+        $col_list = $self->_quote_field_name($cols);
     }
 
+    my $sf_table = $self->_quote_table($table);
     if ($keys and ((ref($keys) eq 'HASH' and %$keys) or (ref($keys) eq 'ARRAY' and @$keys))) {
         my ($where, $exec_args) = $self->_get_clause_for_select_from_hash($keys);
-        $query = qq{SELECT $col_list FROM $table WHERE $where};
+        $query = qq{SELECT $col_list FROM $sf_table WHERE $where};
         return $self->_getStatementHandleForQuery($query, $exec_args);
     } else {
-        $query = qq{SELECT $col_list FROM $table};
+        $query = qq{SELECT $col_list FROM $sf_table};
         return $self->_getStatementHandleForQuery($query);
     }
 }
@@ -945,7 +1016,8 @@ sub _get_clause_for_select_from_hash {
                 push @where, "($clause)";
                 push @values, @$exec_args if $exec_args;
             } else {
-                push @where, "$key=?";
+                my $sf_key = $self->_quote_field_name($key);
+                push @where, "$sf_key=?";
                 push @values, $val;
             }
         }
@@ -959,7 +1031,8 @@ sub _get_clause_for_select_from_hash {
                 push @where, "($clause)";
                 push @values, @$exec_args if $exec_args;
             } else {
-                push @where, "$parent_key=?";
+                my $sf_parent_key = $self->_quote_field_name($parent_key);
+                push @where, "$sf_parent_key=?";
                 push @values, $val;
             }
         }
@@ -1070,7 +1143,7 @@ sub smartUpdate {
     } else {
         my %new_data = %$data;
         while (my ($key, $value) = each %$keys) {
-            $new_data{$key} = $value unless exists $new_data{$key};
+            $new_data{$key} = $value unless CORE::exists $new_data{$key};
         }
         return $self->insert($table, \%new_data);
     }
@@ -1541,7 +1614,7 @@ sub nativeSelectMultiWithArrayRef {
         $self->_runPostFetchHook($r);
         $result = $r->getReturnVal;
             
-        # have to make copy because recent version of DBI now
+        # have to make copy because recent versions of DBI now
         # return the same array reference each time
         push @$list, [ @$result ];
         $result = $sth->fetchrow_arrayref;
@@ -1885,33 +1958,33 @@ sub nativeQueryLoop {
 
 *native_query_loop = \&nativeQueryLoop;
 
-=pod
+# =pod
 
-=head2 newCommand($cmd)
+# =head2 newCommand($cmd)
 
-This method is deprecated.  Use $db->command($cmd_str) instead.
+# This method is deprecated.  Use $db->command($cmd_str) instead.
 
-This creates a literal SQL command for use in insert(), update(),
-and related methods, since if you simply put something like
-"CUR_DATE()" as a value in the %data parameter passed to insert,
-the function will get quoted, and so will not work as expected.
-Instead, do something like this:
+# This creates a literal SQL command for use in insert(), update(),
+# and related methods, since if you simply put something like
+# "CUR_DATE()" as a value in the %data parameter passed to insert,
+# the function will get quoted, and so will not work as expected.
+# Instead, do something like this:
 
-    my $data = { file => 'my_document.txt',
-                 the_date => $db->newCommand('CUR_DATE()')
-               };
-    $db->insert('my_doc_table', $data);
+#     my $data = { file => 'my_document.txt',
+#                  the_date => $db->newCommand('CUR_DATE()')
+#                };
+#     $db->insert('my_doc_table', $data);
 
-This can also be done by passing a reference to a string with the
-SQL command, e.g.,
+# This can also be done by passing a reference to a string with the
+# SQL command, e.g.,
 
-    my $data = { file => 'my_document.txt',
-                 the_date => \'CUR_DATE()'
-               };
-    $db->insert('my_doc_table', $data);
+#     my $data = { file => 'my_document.txt',
+#                  the_date => \'CUR_DATE()'
+#                };
+#     $db->insert('my_doc_table', $data);
 
 
-=cut
+# =cut
 sub newCommand {
     my ($self, $contents) = @_;
     return DBIx::Wrapper::SQLCommand->new($contents);
@@ -2866,7 +2939,7 @@ PURPOSE.
 
 =head1 VERSION
 
-    0.20
+    0.21
 
 =cut
 

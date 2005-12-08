@@ -1,3 +1,12 @@
+Version 0.21
+	* newFromDBI() now returns undef if not passed a DBI object.
+	* exists() method
+	* removed POD documentation for the newCommand() method, as it
+	  has been deprecated for a while now.
+	* tables and fields are now quoted in the resulting SQL query
+	  when calling methods that take Perl datastructures, e.g.,
+	  update()
+
 Version 0.20
 	* added support for named placeholders for native* methods,
 	  except for nativeSelectExecLoop

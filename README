@@ -274,6 +274,11 @@ METHODS
      are kept in the same order.  This is required to use the correct
      multi field indexes in some databases.
 
+  exists($table, \%keys)
+     Returns true if one or more records exist with the given column
+     values in %keys.  %keys can be recursive as in the
+     selectFromHash() method.
+
   selectFromHash($table, \%keys, \@cols);
      Select from table $table using the key/value pairs in %keys to
      specify the WHERE clause of the query.  Multiple key/value pairs
@@ -452,28 +457,6 @@ METHODS
         $loop->next([ 'one', 1]);
         $loop->next([ 'two', 2]);
 
-  newCommand($cmd)
-    This method is deprecated. Use $db->command($cmd_str) instead.
-
-    This creates a literal SQL command for use in insert(), update(), and
-    related methods, since if you simply put something like "CUR_DATE()" as
-    a value in the %data parameter passed to insert, the function will get
-    quoted, and so will not work as expected. Instead, do something like
-    this:
-
-        my $data = { file => 'my_document.txt',
-                     the_date => $db->newCommand('CUR_DATE()')
-                   };
-        $db->insert('my_doc_table', $data);
-
-    This can also be done by passing a reference to a string with the SQL
-    command, e.g.,
-
-        my $data = { file => 'my_document.txt',
-                     the_date => \'CUR_DATE()'
-                   };
-        $db->insert('my_doc_table', $data);
-
   command($cmd_string), literal($cmd_string), sql_literal($cmd_string)
     This creates a literal SQL command for use in insert(), update(), and
     related methods, since if you simply put something like "CUR_DATE()" as
@@ -632,5 +615,5 @@ SEE ALSO
             DBI
 
 VERSION
-            0.20
+            0.21
 
