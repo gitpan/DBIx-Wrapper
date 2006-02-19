@@ -1,3 +1,17 @@
+Version 0.22
+	* Non native* methods no longer convert undef in values to
+	  empty string before inserting/updating.  So now they are
+	  compatible with DBI's behavior.
+	* Added extra (optional) argument \%args to nativeQuery()
+	* do() method now calls DBIx::Wrapper hooks instead of just
+	  being a pass-through
+	* option for connect() to specify that DBIx::Wrapper should
+	  not use placeholders in queries.
+	* selectAll()
+	* nativeSelectMultiOrOne()
+	* added more method aliases
+	* documented method aliases
+
 Version 0.21
 	* newFromDBI() now returns undef if not passed a DBI object.
 	* exists() method
@@ -6,6 +20,7 @@ Version 0.21
 	* tables and fields are now quoted in the resulting SQL query
 	  when calling methods that take Perl datastructures, e.g.,
 	  update()
+	* added literal() as an alias for command()
 
 Version 0.20
 	* added support for named placeholders for native* methods,
