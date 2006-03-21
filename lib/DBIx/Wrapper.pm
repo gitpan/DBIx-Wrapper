@@ -2,7 +2,7 @@
 # Creation date: 2003-03-30 12:17:42
 # Authors: Don
 # Change log:
-# $Id: Wrapper.pm,v 1.73 2006/02/19 17:46:36 don Exp $
+# $Id: Wrapper.pm,v 1.74 2006/03/21 05:08:51 don Exp $
 #
 # Copyright (c) 2003-2006 Don Owens
 #
@@ -11,6 +11,7 @@
 # itself.
 
 # TODO:
+#     $db->not(); e.g., $db->select_from_hash($table, { val => $db->not(undef) });
 #     $db->in();  e.g., $db->update($table, { val => $db->in([ 4, 5, 6]) })
 #     $db->csv();
 #     $db->xml();
@@ -34,6 +35,12 @@ DBIx::Wrapper - A wrapper around the DBI
           { error_handler => sub { print $DBI::errstr },
             debug_handler => sub { print $DBI::errstr },
           });
+
+ my $db = DBIx::Wrapper->connect_from_config($db_key, $config_file,
+          { error_handler => sub { print $DBI::errstr },
+            debug_handler => sub { print $DBI::errstr },
+          });
+          
 
  my $dbi_obj = DBI->connect(...)
  my $db = DBIx::Wrapper->newFromDBI($dbi_obj);
@@ -167,7 +174,7 @@ use Carp ();
 our $AUTOLOAD;
 our $Heavy = 0;
 
-our $VERSION = '0.22';      # update below in POD as well
+our $VERSION = '0.23';      # update below in POD as well
 
 use DBI;
 use DBIx::Wrapper::Request;
@@ -180,6 +187,7 @@ use DBIx::Wrapper::Delegator;
 use DBIx::Wrapper::DBIDelegator;
 
 my %i_data;
+my $have_config_general;
 
 sub refaddr($) {
     my $obj = shift;
@@ -310,7 +318,7 @@ sub import {
 
 =head2 new($data_source, $username, $auth, \%attr, \%params)
 
-An alias for connect().
+ An alias for connect().
 
 =cut
 
@@ -367,6 +375,141 @@ sub connect {
 }
 {   no warnings;
     *new = \&connect;
+}
+
+
+=pod
+
+=head2 connect_from_config($db_key, $config_file, \%params)
+
+ Like connect(), but the parameters used to connect are taken
+ from the given configuration file.  The Config::General module
+ must be present for this method to work (it is loaded as
+ needed).  $config_file should be the path to a configuration
+ file in an Apache-style format.  $db_key is the name of the
+ container with the database connection information you wish to
+ use.  The %params hash is optional and contains extra parameters
+ to control the behaviour of DBIx::Wrapper itself.
+
+ Following is an example configuration file.  Note that the dsn
+ can be specified either as a container with each piece named
+ separately, or as an option whose value is the full dsn that
+ should be based to the underlying DBI object.  Each db container
+ specifies one database connection.  Note that, unlike Apache,
+ the containers and option names are case-sensitive.
+
+    <db test_db_key>
+        <dsn>
+            driver mysql
+            database test_db
+            host example.com
+            port 3306
+        </dsn>
+
+        user test_user
+        password test_pwd
+
+        <attributes>
+            RaiseError 0
+            PrintError 1
+        </attributes>
+    </db>
+
+    <db test_db_key2>
+        dsn "dbi:mysql:database=test_db;host=example.com;port=3306"
+
+        user test_user
+        password test_pwd
+    </db>
+
+
+ Configuration features from Config::General supported:
+
+   * Perl style comments
+   * C-style comments
+   * Here-documents
+   * Apache style Include directive
+   * Variable interpolation (see docs for Config::General::Interpolated)
+
+=cut
+sub connect_from_config {
+    my ($self, $db_key, $conf_path, $wrapper_attrs) = @_;
+
+    my $config = $self->_read_config_file($conf_path);
+
+    # FIXME: need to set $DBI::errstr here or something
+    unless ($config) {
+        return;
+    }
+
+    my $dbs = $config->{db};
+    my $this_db = $dbs->{$db_key};
+
+    # FIXME: need to set $DBI::errstr here or something
+    unless ($this_db) {
+        # $DBI::errstr = "no entry for database key $db_key in $conf_path";
+        return;
+    }
+
+    my $dsn = $this_db->{dsn};
+    my $user = $this_db->{user};
+    my $pwd = $this_db->{password};
+
+    if (ref($dsn) eq 'HASH') {
+        my @keys = grep { $_ ne 'driver' } sort keys %$dsn;
+        $dsn = "dbi:$dsn->{driver}:" . join(';', map { "$_=$dsn->{$_}" } @keys);
+    }
+
+    my $attr_container = $this_db->{attributes};
+    my $attrs = {};
+    if ($attr_container and UNIVERSAL::isa($attr_container, 'HASH')) {
+        $attrs = { %$attr_container };
+    }
+
+    return DBIx::Wrapper->connect($dsn, $user, $pwd, $attrs, $wrapper_attrs);    
+}
+
+sub _read_config_file {
+    my $self = shift;
+    my $config_file = shift;
+
+    unless ($self->_load_config_general) {
+        warn "cannot load config file '$config_file' -- Config::General not present";
+        return;
+    }
+    
+    my $config_obj = Config::General->new(-ConfigFile => $config_file,
+                                          # -LowerCaseNames => 1,
+                                          -UseApacheInclude => 1,
+                                          -IncludeRelative => 1,
+                                          -MergeDuplicateBlocks => 1,
+                                          -AllowMultiOptions => 'yes',
+                                          -SplitPolicy => 'whitespace',
+                                          -InterPolateVars => 1,
+                                          # -SplitPolicy => 'guess',
+                                         );
+
+    unless ($config_obj) {
+        return;
+    }
+    
+    my %config = $config_obj->getall;
+    return \%config;
+}
+
+sub _load_config_general {
+    if (defined($have_config_general)) {
+        return $have_config_general;
+    }
+
+    local($SIG{__DIE__});
+    eval 'use Config::General';
+    if ($@) {
+        $have_config_general = 0;
+    }
+    else {
+        $have_config_general = 1;
+    }
 }
 
 =pod
@@ -977,7 +1120,29 @@ sub update {
     my $where;
     if (defined($keys)) {
         if ($self->_getNoPlaceholders) {
-            $where = join(" AND ", map { $self->_equals_or_is_null($_, $keys->{$_}) } @keys);
+            my @where;
+            foreach my $key (@keys) {
+                my $val = $keys->{$key};
+                if (UNIVERSAL::isa($val, 'DBIx::Wrapper::SQLCommand')) {
+                    my $sf_field = $self->_quote_field_name($key);
+
+                    if ($val->has_condition) {
+                        my ($cond, $r_val) = $val->get_condition(not $self->_getNoPlaceholders);
+
+                        if (defined($r_val)) {
+                            push @where, "$sf_field $cond $r_val";
+                        } else {
+                            push @where, "$sf_field $cond";
+                        }
+                    }
+                    
+                }
+                else {
+                    push @where, $self->_equals_or_is_null($key, $val);
+                }
+            }
+            $where = join(" AND ", @where);
+            # $where = join(" AND ", map { $self->_equals_or_is_null($_, $keys->{$_}) } @keys);
         }
         else {
             my @where;
@@ -985,8 +1150,23 @@ sub update {
                 my $sf_field = $self->_quote_field_name($key);
                 my $val = $keys->{$key};
                 if (defined($val)) {
-                    push @values, $val;
-                    push @where, "$sf_field=?";
+                    if (UNIVERSAL::isa($val, 'DBIx::Wrapper::SQLCommand')) {
+                        if ($val->has_condition) {
+                            my ($cond, $r_val) = $val->get_condition(not $self->_getNoPlaceholders);
+                            if (defined($r_val)) {
+                                push @where, "$sf_field $cond $r_val";
+                                push @values, $val->get_val;
+                            } else {
+                                push @where, "$sf_field $cond";
+                            }
+                        }
+
+                    }
+                    else {
+                        push @values, $val;
+                        push @where, "$sf_field=?";
+                    }
+            
                 }
                 else {
                     push @where, "$sf_field IS NULL";
@@ -2328,6 +2508,13 @@ sub command {
 *sql_literal = \&command;
 *literal = \&command;
 
+sub not {
+    my $self = shift;
+    my $val = shift;
+
+    return DBIx::Wrapper::SQLCommand->new_cond($self, 'not', $val);
+}
+
 =pod
 
 =head2 debugOn(\*FILE_HANDLE)
@@ -2973,6 +3160,8 @@ sub rollback {
 
 =item ping
 
+=back
+
 =cut
 sub ping {
     my ($self) =@_;
@@ -3301,7 +3490,7 @@ PURPOSE.
 
 =head1 VERSION
 
-    0.22
+    0.23
 
 =cut
 

@@ -11,6 +11,11 @@ SYNOPSIS
                 debug_handler => sub { print $DBI::errstr },
               });
 
+     my $db = DBIx::Wrapper->connect_from_config($db_key, $config_file,
+              { error_handler => sub { print $DBI::errstr },
+                debug_handler => sub { print $DBI::errstr },
+              });
+          
      my $dbi_obj = DBI->connect(...)
      my $db = DBIx::Wrapper->newFromDBI($dbi_obj);
 
@@ -184,7 +189,56 @@ METHODS
          placeholders.
 
   new($data_source, $username, $auth, \%attr, \%params)
-    An alias for connect().
+     An alias for connect().
+
+  connect_from_config($db_key, $config_file, \%params)
+     Like connect(), but the parameters used to connect are taken
+     from the given configuration file.  The Config::General module
+     must be present for this method to work (it is loaded as
+     needed).  $config_file should be the path to a configuration
+     file in an Apache-style format.  $db_key is the name of the
+     container with the database connection information you wish to
+     use.  The %params hash is optional and contains extra parameters
+     to control the behaviour of DBIx::Wrapper itself.
+
+     Following is an example configuration file.  Note that the dsn
+     can be specified either as a container with each piece named
+     separately, or as an option whose value is the full dsn that
+     should be based to the underlying DBI object.  Each db container
+     specifies one database connection.  Note that, unlike Apache,
+     the containers and option names are case-sensitive.
+
+        <db test_db_key>
+            <dsn>
+                driver mysql
+                database test_db
+                host example.com
+                port 3306
+            </dsn>
+
+            user test_user
+            password test_pwd
+
+            <attributes>
+                RaiseError 0
+                PrintError 1
+            </attributes>
+        </db>
+
+        <db test_db_key2>
+            dsn "dbi:mysql:database=test_db;host=example.com;port=3306"
+
+            user test_user
+            password test_pwd
+        </db>
+
+     Configuration features from Config::General supported:
+
+       * Perl style comments
+       * C-style comments
+       * Here-documents
+       * Apache style Include directive
+       * Variable interpolation (see docs for Config::General::Interpolated)
 
   reconnect()
      Reconnect to the database using the same parameters that were
@@ -635,84 +689,81 @@ METHODS
     ping
 
   getLastInsertId(), get_last_insert_id(), last_insert_id()
-         Returns the last_insert_id.  The default is to be MySQL
-         specific.  It just runs the query "SELECT LAST_INSERT_ID()".
-         However, it will also work with MSSQL with the right parameters
-         (see the db_style parameter in the section explaining the
-         connect() method).
+     Returns the last_insert_id.  The default is to be MySQL
+     specific.  It just runs the query "SELECT LAST_INSERT_ID()".
+     However, it will also work with MSSQL with the right parameters
+     (see the db_style parameter in the section explaining the
+     connect() method).
 
   Hooks
-        DBIx::Wrapper supports hooks that get called just before and just
-        after various query operations. The add*Hook methods take a single
-        argument that is either a code reference (e.g., anonymous subroutine
-        reference), or an array whose first element is an object and whose
-        second element is the name of a method to call on that object.
+    DBIx::Wrapper supports hooks that get called just before and just after
+    various query operations. The add*Hook methods take a single argument
+    that is either a code reference (e.g., anonymous subroutine reference),
+    or an array whose first element is an object and whose second element is
+    the name of a method to call on that object.
 
-        The hooks will be called with a request object as the first
-        argument. See DBIx::Wrapper::Request.
+    The hooks will be called with a request object as the first argument.
+    See DBIx::Wrapper::Request.
 
-        The two expected return values are $request->OK and
-        $request->DECLINED. The first tells DBIx::Wrapper that the current
-        hook has done everything that needs to be done and doesn't call any
-        other hooks in the stack for the current request. DECLINED tells
-        DBIx::Wrapper to continue down the hook stack as if the current
-        handler was never invoked.
+    The two expected return values are $request->OK and $request->DECLINED.
+    The first tells DBIx::Wrapper that the current hook has done everything
+    that needs to be done and doesn't call any other hooks in the stack for
+    the current request. DECLINED tells DBIx::Wrapper to continue down the
+    hook stack as if the current handler was never invoked.
 
-        See DBIx::Wrapper::Request for example hooks.
+    See DBIx::Wrapper::Request for example hooks.
 
    addPrePrepareHook($hook)
-        Specifies a hook to be called just before any SQL statement is
-        prepare()'d.
+    Specifies a hook to be called just before any SQL statement is
+    prepare()'d.
 
    addPostPrepareHook($hook)
-        Specifies a hook to be called just after any SQL statement is
-        prepare()'d.
+    Specifies a hook to be called just after any SQL statement is
+    prepare()'d.
 
    addPreExecHook($hook)
-        Specifies a hook to be called just before any SQL statement is
-        execute()'d.
+    Specifies a hook to be called just before any SQL statement is
+    execute()'d.
 
    addPostExecHook($hook)
-        Adds a hook to be called just after a statement is execute()'d.
+    Adds a hook to be called just after a statement is execute()'d.
 
    addPreFetchHook($hook)
-        Adds a hook to be called just before data is fetch()'d from the
-        server.
+    Adds a hook to be called just before data is fetch()'d from the server.
 
    addPostFetchHook($hook)
-        Adds a hook to be called just after data is fetch()'d from the
-        server.
+    Adds a hook to be called just after data is fetch()'d from the server.
 
   There are also underscore_separated versions of these methods.
-            E.g., nativeSelectLoop() becomes native_select_loop()
+        E.g., nativeSelectLoop() becomes native_select_loop()
 
 DEPENDENCIES
-            DBI
+        DBI
 
 ACKNOWLEDGEMENTS
-            Others who have contributed ideas and/or code for this module:
+        Others who have contributed ideas and/or code for this module:
 
-            Kevin Wilson
-            Mark Stosberg
-            David Bushong
+        Kevin Wilson
+        Mark Stosberg
+        David Bushong
 
 AUTHOR
-            Don Owens <don@owensnet.com>
+        Don Owens <don@owensnet.com>
 
 LICENSE AND COPYRIGHT
-        Copyright (c) 2003-2006 Don Owens (don@owensnet.com). All rights
-        reserved.
+    Copyright (c) 2003-2006 Don Owens (don@owensnet.com). All rights
+    reserved.
 
-        This free software; you can redistribute it and/or modify it under
-        the same terms as Perl itself. See perlartistic.
+    This free software; you can redistribute it and/or modify it under the
+    same terms as Perl itself. See perlartistic.
 
-        This program is distributed in the hope that it will be useful, but
-        WITHOUT ANY WARRANTY; without even the implied warranty of
-        MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+    This program is distributed in the hope that it will be useful, but
+    WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 
 SEE ALSO
-            DBI, perl
+        DBI, perl
 
 VERSION
-            0.22
+        0.23
 

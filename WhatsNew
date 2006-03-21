@@ -1,3 +1,6 @@
+Version 0.23
+	* Added the connect_from_config() method
+
 Version 0.22
 	* Non native* methods no longer convert undef in values to
 	  empty string before inserting/updating.  So now they are
