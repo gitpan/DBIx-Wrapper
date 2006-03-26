@@ -1,19 +1,15 @@
 # Creation date: 2005-10-16 20:42:19
 # Authors: don
 
-=pod
+# Copyright (c) 2005-2006 Don Owens <don@owensnet.com>.  All rights reserved.
 
-=head1 NAME
+# This is free software; you can redistribute it and/or modify it
+# under the same terms as Perl itself.  See perlartistic.
 
- DBIx::Wrapper::DBIDelegator - 
-
-=head1 SYNOPSIS
-
-
-=head1 DESCRIPTION
-
-
-=cut
+# This program is distributed in the hope that it will be
+# useful, but WITHOUT ANY WARRANTY; without even the implied
+# warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
+# PURPOSE.
 
 use strict;
 use warnings;
@@ -21,7 +17,7 @@ use warnings;
 package DBIx::Wrapper::DBIDelegator;
 
 use vars qw($VERSION);
-$VERSION = do { my @r=(q$Revision: 1.3 $=~/\d+/g); sprintf "%d."."%02d"x$#r,@r };
+$VERSION = do { my @r=(q$Revision: 1.4 $=~/\d+/g); sprintf "%d."."%02d"x$#r,@r };
 
 # use Scalar::Util qw(refaddr);
 use Carp qw(cluck);
@@ -37,13 +33,6 @@ sub refaddr($) {
   return $i;
 }
 
-
-=pod
-
-=head1 METHODS
-
-
-=cut
 
 sub _new {
     my $proto = shift;
@@ -157,42 +146,6 @@ sub DESTROY {
     delete $i_data{ refaddr($self) };
     return;
 }
-
-
-
-
-=pod
-
-=head1 EXAMPLES
-
-
-=head1 DEPENDENCIES
-
-
-=head1 AUTHOR
-
-Don Owens <don@owensnet.com>
-
-=head1 LICENSE AND COPYRIGHT
-
-Copyright (c) 2005 Don Owens <don@owensnet.com>.  All rights reserved.
-
-This is free software; you can redistribute it and/or modify it
-under the same terms as Perl itself.  See perlartistic.
-
-This program is distributed in the hope that it will be
-useful, but WITHOUT ANY WARRANTY; without even the implied
-warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
-PURPOSE.
-
-=head1 SEE ALSO
-
-
-=head1 VERSION
-
- 0.01
-
-=cut
 
 1;
 

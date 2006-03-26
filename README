@@ -92,6 +92,10 @@ SYNOPSIS
      $db->ping();
      $db->err();
 
+     my $str = $db->to_csv($rows);
+     my $xml = $db->to_xml($rows);
+     my $bencoded = $db->bencode($rows);
+
   Attributes
      Attributes accessed in DBIx::Wrapper object via hash access are
      passed on or retrieved from the underlying DBI object, e.g.,
@@ -121,7 +125,7 @@ DESCRIPTION
     easier on the programmer. This module allows you to execute a query with
     a single method call as well as make inserts easier, etc. It also
     supports running hooks at various stages of processing a query (see the
-    section on Hooks).
+    section on "Hooks").
 
 METHODS
     Following are DBIx::Wrapper methods. Any undocumented methods should be
@@ -734,6 +738,57 @@ METHODS
    addPostFetchHook($hook)
     Adds a hook to be called just after data is fetch()'d from the server.
 
+  Convenience methods
+   to_csv($rows, \%params);
+     Convert the given query result rows in @rows to a CSV string.
+     If each row is a hash, a header row will be included by the
+     default giving the column names.  This method also supports rows
+     as arrays, as well as $rows itself being a hash ref.
+
+     Valid parameters in %params:
+
+    sep
+         The separator to use between columns.
+
+    quote
+         The quote to use in cases where values contain the separator.
+         If a quote is found in a value, it is converted to two quotes
+         and then the whole value is quoted.
+
+    no_header
+         If set to a true value, do not output the header row containing
+         the column names.
+
+     Aliases: toCsv()
+
+   to_xml($data, \%params)
+     Converts $data to xml.  $data is expected to be either a hash
+     ref or a reference to an array of hash refs.  If $data is an
+     array ref, enclosing tags are put around each record.  The tags
+     are named "record" by default but can be changed by specifying
+     record_tag in %params.  If $params{indent} is set to a true
+     value, tags will be indented and unix newlines inserted.  This
+     method does not output an encoding specification, e.g.,
+
+         <?xml version="1.0" encoding="utf-8"?>
+
+     Aliases: toXml()
+
+   bencode($data)
+     Returns the bencoded representation of $data (arbitrary
+     datastructure -- but not objects).  This module extends the
+     bencode scheme to support undef.  See
+     L<http://en.wikipedia.org/wiki/Bencode> for details on the bencode
+     encoding.
+
+     Aliases: bEncode()
+
+   bdecode($encoded_str)
+     The opposite of bencode().  Returns the deserialized data from
+     the bencoded string.
+
+     Aliases: bDecode()
+
   There are also underscore_separated versions of these methods.
         E.g., nativeSelectLoop() becomes native_select_loop()
 
@@ -748,10 +803,10 @@ ACKNOWLEDGEMENTS
         David Bushong
 
 AUTHOR
-        Don Owens <don@owensnet.com>
+        Don Owens <don@regexguy.com>
 
 LICENSE AND COPYRIGHT
-    Copyright (c) 2003-2006 Don Owens (don@owensnet.com). All rights
+    Copyright (c) 2003-2006 Don Owens (don@regexguy.com). All rights
     reserved.
 
     This free software; you can redistribute it and/or modify it under the
@@ -765,5 +820,5 @@ SEE ALSO
         DBI, perl
 
 VERSION
-        0.23
+        0.24
 

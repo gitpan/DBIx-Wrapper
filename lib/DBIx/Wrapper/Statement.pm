@@ -2,14 +2,21 @@
 # Creation date: 2003-03-30 15:23:31
 # Authors: Don
 # Change log:
-# $Id: Statement.pm,v 1.4 2004/10/30 00:09:31 don Exp $
+# $Id: Statement.pm,v 1.5 2006/03/26 19:18:35 don Exp $
+
+# Copyright (c) 2003-2006 Don Owens
+#
+# All rights reserved. This program is free software; you can
+# redistribute it and/or modify it under the same terms as Perl
+# itself.
+
 
 use strict;
 
 {   package DBIx::Wrapper::Statement;
 
     use vars qw($VERSION);
-    $VERSION = do { my @r=(q$Revision: 1.4 $=~/\d+/g); sprintf "%d."."%02d"x$#r,@r };
+    $VERSION = do { my @r=(q$Revision: 1.5 $=~/\d+/g); sprintf "%d."."%02d"x$#r,@r };
 
     sub new {
         my ($proto) = @_;
@@ -65,34 +72,3 @@ use strict;
 
 1;
 
-__END__
-
-=pod
-
-=head1 NAME
-
-DBIx::Wrapper::Statement - Statement wrapper used by DBIx::Wrapper
-
-=head1 SYNOPSIS
-
-
-=head1 DESCRIPTION
-
-
-=head1 METHODS
-
-
-=head1 EXAMPLES
-
-
-=head1 BUGS
-
-
-=head1 AUTHOR
-
-
-=head1 VERSION
-
-$Id: Statement.pm,v 1.4 2004/10/30 00:09:31 don Exp $
-
-=cut

@@ -2,14 +2,20 @@
 # Creation date: 2003-03-30 15:24:44
 # Authors: Don
 # Change log:
-# $Id: StatementLoop.pm,v 1.8 2005/03/05 23:34:02 don Exp $
+# $Id: StatementLoop.pm,v 1.9 2006/03/26 19:18:36 don Exp $
+
+# Copyright (c) 2003-2006 Don Owens
+#
+# All rights reserved. This program is free software; you can
+# redistribute it and/or modify it under the same terms as Perl
+# itself.
 
 use strict;
 
 {   package DBIx::Wrapper::StatementLoop;
 
     use vars qw($VERSION);
-    $VERSION = do { my @r=(q$Revision: 1.8 $=~/\d+/g); sprintf "%d."."%02d"x$#r,@r };
+    $VERSION = do { my @r=(q$Revision: 1.9 $=~/\d+/g); sprintf "%d."."%02d"x$#r,@r };
 
     use base 'DBIx::Wrapper::Statement';
 
@@ -76,35 +82,3 @@ use strict;
 
 1;
 
-__END__
-
-=pod
-
-=head1 NAME
-
-DBIx::Wrapper::StatementLoop - Used by DBIx::Wrapper to implement
-StatementLoop methods.
-
-=head1 SYNOPSIS
-
-
-=head1 DESCRIPTION
-
-
-=head1 METHODS
-
-
-=head1 EXAMPLES
-
-
-=head1 BUGS
-
-
-=head1 AUTHOR
-
-
-=head1 VERSION
-
-$Id: StatementLoop.pm,v 1.8 2005/03/05 23:34:02 don Exp $
-
-=cut

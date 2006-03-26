@@ -2,19 +2,23 @@
 # Creation date: 2003-03-30 12:17:42
 # Authors: Don
 # Change log:
-# $Id: Wrapper.pm,v 1.74 2006/03/21 05:08:51 don Exp $
+# $Id: Wrapper.pm,v 1.75 2006/03/26 19:18:34 don Exp $
 #
 # Copyright (c) 2003-2006 Don Owens
 #
 # All rights reserved. This program is free software; you can
 # redistribute it and/or modify it under the same terms as Perl
 # itself.
+#
+# This program is distributed in the hope that it will be
+# useful, but WITHOUT ANY WARRANTY; without even the implied
+# warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
+# PURPOSE.
 
 # TODO:
 #     $db->not(); e.g., $db->select_from_hash($table, { val => $db->not(undef) });
 #     $db->in();  e.g., $db->update($table, { val => $db->in([ 4, 5, 6]) })
-#     $db->csv();
-#     $db->xml();
+#
 #     * Take care of error caused by using DBD-mysql-2.1026
 #       - It either gives the wrong quote for quoting
 #         identifiers, or doesn't allow identifiers to be quoted
@@ -118,6 +122,10 @@ DBIx::Wrapper - A wrapper around the DBI
  $db->ping();
  $db->err();
 
+ my $str = $db->to_csv($rows);
+ my $xml = $db->to_xml($rows);
+ my $bencoded = $db->bencode($rows);
+
 
 =head2 Attributes
 
@@ -151,7 +159,23 @@ DBIx::Wrapper provides a wrapper around the DBI that makes it a
 bit easier on the programmer.  This module allows you to execute
 a query with a single method call as well as make inserts easier,
 etc.  It also supports running hooks at various stages of
-processing a query (see the section on Hooks).
+processing a query (see the section on L</Hooks>).
+
+=cut
+
+# =over
+
+# =item * tries to maintain database independence
+
+# =item * inserts, updates, and deletes using native Perl datastructures
+
+# =item * combines prepare, execute, fetch of DBIx::Wrapper into a single call
+
+# =item * convenience methods such as to_csv, to_xml, to_bencode, etc.
+
+# =back
+
+=pod
 
 =head1 METHODS
 
@@ -174,7 +198,7 @@ use Carp ();
 our $AUTOLOAD;
 our $Heavy = 0;
 
-our $VERSION = '0.23';      # update below in POD as well
+our $VERSION = '0.24';      # update below in POD as well
 
 use DBI;
 use DBIx::Wrapper::Request;
@@ -189,13 +213,48 @@ use DBIx::Wrapper::DBIDelegator;
 my %i_data;
 my $have_config_general;
 
+# adapted from refaddr in Scalar::Util
 sub refaddr($) {
     my $obj = shift;
     my $pkg = ref($obj) or return undef;
-  bless $obj, 'DBIx::Wrapper::Fake';
-  my $i = int($obj);
-  bless $obj, $pkg;
-  return $i;
+    
+    bless $obj, 'DBIx::Wrapper::Fake';
+    
+    my $i = int($obj);
+    
+    bless $obj, $pkg;
+    
+    return $i;
+}
+
+# taken verbatim from Scalar::Util
+sub reftype ($) {
+  local($@, $SIG{__DIE__}, $SIG{__WARN__});
+  my $r = shift;
+  my $t;
+
+  length($t = ref($r)) or return undef;
+
+  # This eval will fail if the reference is not blessed
+  eval { $r->a_sub_not_likely_to_be_here; 1 }
+    ? do {
+      $t = eval {
+	  # we have a GLOB or an IO. Stringify a GLOB gives it's name
+	  my $q = *$r;
+	  $q =~ /^\*/ ? "GLOB" : "IO";
+	}
+	or do {
+	  # OK, if we don't have a GLOB what parts of
+	  # a glob will it populate.
+	  # NOTE: A glob always has a SCALAR
+	  local *glob = $r;
+	  defined *glob{ARRAY} && "ARRAY"
+	  or defined *glob{HASH} && "HASH"
+	  or defined *glob{CODE} && "CODE"
+	  or length(ref(${$r})) ? "REF" : "SCALAR";
+	}
+    }
+    : $t
 }
 
 sub _new {
@@ -3308,7 +3367,7 @@ object and whose second element is the name of a method to call
 on that object.
 
 The hooks will be called with a request object as the first
-argument.  See DBIx::Wrapper::Request.
+argument.  See L<DBIx::Wrapper::Request>.
 
 The two expected return values are $request->OK and
 $request->DECLINED.  The first tells DBIx::Wrapper that the
@@ -3317,7 +3376,7 @@ doesn't call any other hooks in the stack for the current
 request.  DECLINED tells DBIx::Wrapper to continue down the
 hook stack as if the current handler was never invoked.
 
-See DBIx::Wrapper::Request for example hooks.
+See L<DBIx::Wrapper::Request> for example hooks.
 
 =cut
 
@@ -3419,6 +3478,314 @@ sub addPostFetchHook {
 
 *addPostFetchHandler = \&addPostFetchHook;
 
+sub _to_csv_line {
+    my $cols = shift;
+    my $sep = shift;
+    my $quote = shift;
+    
+    $sep = "," unless defined($sep);
+    $quote = "\"" unless defined($quote);
+
+    my $sf_sep = quotemeta($sep);
+    my $sf_quote = quotemeta($quote);
+
+    my @sf_cols;
+    foreach my $col (@$cols) {
+        if (index($col, $sep) >= 0 or index($col, $quote) >= 0) {
+            $col =~ s/$sf_quote/$quote$quote/g;
+            $col = $quote . $col . $quote;
+        }
+        push @sf_cols, $col;
+    }
+
+    return join($sep, @sf_cols);
+}
+
+=pod
+
+=head2 Convenience methods
+
+=cut
+
+=pod
+
+=head3 to_csv($rows, \%params);
+
+ Convert the given query result rows in @rows to a CSV string.
+ If each row is a hash, a header row will be included by the
+ default giving the column names.  This method also supports rows
+ as arrays, as well as $rows itself being a hash ref.
+
+ Valid parameters in %params:
+
+=over 4
+
+=item sep
+
+ The separator to use between columns.
+
+=item quote
+
+ The quote to use in cases where values contain the separator.
+ If a quote is found in a value, it is converted to two quotes
+ and then the whole value is quoted.
+
+=item no_header
+
+ If set to a true value, do not output the header row containing
+ the column names.
+
+=back
+
+ Aliases: toCsv()
+
+=cut
+sub to_csv {
+    my $self = shift;
+    my $rows = shift;
+    my $params = shift || {};
+
+    my $sep = $params->{sep};
+    my $quote = $params->{quote};
+    my $no_header = $params->{no_header};
+
+    my $csv = '';
+    
+    if (reftype($rows) eq 'ARRAY') {
+        return '' unless @$rows;
+
+        my $first_row = $rows->[0];
+        
+        if (reftype($first_row) eq 'HASH') {
+            my @fields = sort keys %$first_row;
+            
+            unless ($no_header) {
+                $csv .= _to_csv_line(\@fields, $sep, $quote) . "\n";
+            }
+            
+            foreach my $row (@$rows) {
+                $csv .= _to_csv_line([ map { $row->{$_} } @fields ], $sep, $quote) . "\n";
+            }
+        } elsif (reftype($first_row) eq 'ARRAY') {
+            foreach my $row (@$rows) {
+                $csv .= _to_csv_line($row, $sep, $quote) . "\n";
+            }
+        }
+    }
+    elsif (reftype($rows) eq 'HASH') {
+        my $row = $rows;
+        my @fields = sort keys %$row;
+        unless ($no_header) {
+            $csv .= _to_csv_line(\@fields, $sep, $quote) . "\n";
+        }
+        
+        $csv .= _to_csv_line([ map { $row->{$_} } @fields ], $sep, $quote) . "\n";
+    }
+    else {
+        # error
+        return;
+    }
+
+    return $csv;
+}
+*toCsv = \&to_csv;
+
+sub _hash_to_xml {
+    my $self = shift;
+    my $hash = shift;
+    my $indent = shift;
+
+    my $xml = '';
+    my @keys = sort keys %$hash;
+    foreach my $key (@keys) {
+        $xml .= ' ' x 4 if $indent;
+        $xml .= '<' . $key . '>' . $self->escape_xml($hash->{$key}) . '</' . $key . '>';
+        $xml .= "\n" if $indent;
+    }
+    
+    return $xml;
+}
+
+=pod
+
+=head3 to_xml($data, \%params)
+
+ Converts $data to xml.  $data is expected to be either a hash
+ ref or a reference to an array of hash refs.  If $data is an
+ array ref, enclosing tags are put around each record.  The tags
+ are named "record" by default but can be changed by specifying
+ record_tag in %params.  If $params{indent} is set to a true
+ value, tags will be indented and unix newlines inserted.  This
+ method does not output an encoding specification, e.g.,
+
+     <?xml version="1.0" encoding="utf-8"?>
+
+ Aliases: toXml()
+
+=cut
+sub to_xml {
+    my $self = shift;
+    my $rows = shift;
+    my $params = shift || {};
+
+    my $indent = $params->{indent};
+    my $record_tag_name = $params->{record_tag};
+    unless (defined($record_tag_name)) {
+        $record_tag_name = 'record';
+    }
+
+    if (reftype($rows) eq 'ARRAY') {
+        return '' unless @$rows;
+
+        my $xml = '';
+        foreach my $row (@$rows) {
+            $xml .= '<' . $record_tag_name . '>';
+            $xml .= "\n" if $indent;
+            $xml .= _hash_to_xml($self, $row, $indent);
+            $xml .= '</' . $record_tag_name . '>';
+            $xml .= "\n" if $indent;
+
+        }
+
+        return $xml;
+    } elsif (reftype($rows) eq 'HASH') {
+        return _hash_to_xml($self, $rows);
+    }
+
+    return;
+}
+
+sub escape_xml {
+    my $self = shift;
+    my $text = shift;
+    return '' unless defined $text;
+        
+    $text =~ s/\&/\&amp;/g;
+    $text =~ s/</\&lt;/g;
+    $text =~ s/>/\&gt;/g;
+    # $text =~ s/\"/\&quot;/g;
+
+    return $text;
+}
+
+*toXml = \&to_xml;
+
+=pod
+
+=head3 bencode($data)
+
+ Returns the bencoded representation of $data (arbitrary
+ datastructure -- but not objects).  This module extends the
+ bencode scheme to support undef.  See
+ L<http://en.wikipedia.org/wiki/Bencode> for details on the bencode
+ encoding.
+
+ Aliases: bEncode()
+
+=cut
+sub bencode {
+    my $self = shift;
+    my $to_encode = shift;
+
+    unless (defined($to_encode)) {
+        return 'n';
+    }
+
+    my $encoded = '';
+    my $type = reftype($to_encode);
+
+    unless ($type) {
+        $encoded .= length($to_encode) . ':' . $to_encode;
+        return $encoded;
+    }
+    
+    if ($type eq 'HASH') {
+        $encoded .= 'd';
+        foreach my $key (sort keys %$to_encode) {
+            $encoded .= $self->bencode($key);
+            $encoded .= $self->bencode($to_encode->{$key});
+        }
+        $encoded .= 'e';
+    }
+    elsif ($type eq 'ARRAY') {
+        $encoded .= 'l';
+        foreach my $element (@$to_encode) {
+            $encoded .= $self->bencode($element);
+        }
+        $encoded .= 'e';
+    }
+    elsif ($to_encode =~ /\A\d+\Z/) {
+        $encoded .= 'i' . $to_encode . 'e';
+    }
+
+    return $encoded;
+}
+
+*bEncode = \&bencode;
+
+=pod
+
+=head3 bdecode($encoded_str)
+
+ The opposite of bencode().  Returns the deserialized data from
+ the bencoded string.
+
+ Aliases: bDecode()
+
+=cut
+sub bdecode {
+    my $self = shift;
+    my $to_decode = shift;
+
+    return $self->_bdecode(\$to_decode);
+}
+
+*bDecode = \&bdecode;
+
+sub _bdecode {
+    my $self = shift;
+    my $str_ref = shift;
+    
+    if ($$str_ref =~ m/\A(\d+):/) {
+        my $length = $1;
+        my $val = substr($$str_ref, length($1) + 1, $length);
+        substr($$str_ref, 0, length($1) + 1 + $length) = '';
+
+        return $val;
+    }
+    elsif ($$str_ref =~ s/\A(.)//) {
+        my $letter = $1;
+        if ($letter eq 'n') {
+            return undef;
+        }
+        elsif ($letter eq 'i') {
+            $$str_ref =~ s/\A(\d+)e//;
+            return $1;
+        }
+        elsif ($letter eq 'l') {
+            my @list;
+            while ($$str_ref !~ m/\Ae/ and $$str_ref ne '') {
+                push @list, $self->_bdecode($str_ref);
+            }
+            $$str_ref =~ s/\Ae//;
+
+            return \@list;
+        }
+        elsif ($letter eq 'd') {
+            my %hash;
+            while ($$str_ref !~ m/\Ae/ and $$str_ref ne '') {
+                my $key = $self->_bdecode($str_ref);
+                $hash{$key} = $self->_bdecode($str_ref);
+            }
+            $$str_ref =~ s/\Ae//;
+
+            return \%hash;
+        }
+    }
+    
+    return;
+}
+
 sub _do_benchmark {
     my $self = shift;
     
@@ -3470,11 +3837,11 @@ sub AUTOLOAD {
 
 =head1 AUTHOR
 
-    Don Owens <don@owensnet.com>
+    Don Owens <don@regexguy.com>
 
 =head1 LICENSE AND COPYRIGHT
 
-Copyright (c) 2003-2006 Don Owens (don@owensnet.com).  All rights reserved.
+Copyright (c) 2003-2006 Don Owens (don@regexguy.com).  All rights reserved.
 
 This free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.  See perlartistic.
@@ -3490,7 +3857,7 @@ PURPOSE.
 
 =head1 VERSION
 
-    0.23
+    0.24
 
 =cut
 

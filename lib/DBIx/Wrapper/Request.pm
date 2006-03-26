@@ -1,14 +1,14 @@
 # -*-perl-*-
 # Creation date: 2004-10-29 14:01:59
 # Authors: Don
-# $Id: Request.pm,v 1.6 2005/10/14 18:24:02 don Exp $
+# $Id: Request.pm,v 1.7 2006/03/26 19:18:35 don Exp $
 
 use strict;
 
 {   package DBIx::Wrapper::Request;
 
     use vars qw($VERSION);
-    $VERSION = do { my @r=(q$Revision: 1.6 $=~/\d+/g); sprintf "%d."."%02d"x$#r,@r };
+    $VERSION = do { my @r=(q$Revision: 1.7 $=~/\d+/g); sprintf "%d."."%02d"x$#r,@r };
 
     sub new {
         my $proto = shift;
@@ -91,8 +91,6 @@ use strict;
 }
 
 1;
-
-__END__
 
 =pod
 
@@ -275,12 +273,25 @@ __END__
 
 =head1 BUGS
 
-
 =head1 AUTHOR
+
+    Don Owens <don@regexguy.com>
+
+=head1 LICENSE AND COPYRIGHT
+
+Copyright (c) 2004-2006 Don Owens (don@regexguy.com).  All rights reserved.
+
+This free software; you can redistribute it and/or modify it
+under the same terms as Perl itself.  See perlartistic.
+
+This program is distributed in the hope that it will be
+useful, but WITHOUT ANY WARRANTY; without even the implied
+warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
+PURPOSE.
 
 
 =head1 VERSION
 
-$Id: Request.pm,v 1.6 2005/10/14 18:24:02 don Exp $
+$Id: Request.pm,v 1.7 2006/03/26 19:18:35 don Exp $
 
 =cut
