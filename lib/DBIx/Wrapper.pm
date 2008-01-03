@@ -2,9 +2,9 @@
 # Creation date: 2003-03-30 12:17:42
 # Authors: Don
 # Change log:
-# $Id: Wrapper.pm,v 1.75 2006/03/26 19:18:34 don Exp $
+# $Id: Wrapper.pm,v 1.80 2008/01/03 03:04:27 don Exp $
 #
-# Copyright (c) 2003-2006 Don Owens
+# Copyright (c) 2003-2008 Don Owens
 #
 # All rights reserved. This program is free software; you can
 # redistribute it and/or modify it under the same terms as Perl
@@ -101,12 +101,12 @@ DBIx::Wrapper - A wrapper around the DBI
  my $row = $db->abstractSelect($table, \@fields, \%where, \@order);
  my $rows = $db->abstractSelectMulti($table, \@fields, \%where, \@order);
 
- my $loop = $db->nativeSelectLoop($query, @exec_args);
+ my $loop = $db->nativeSelectLoop($query, \@exec_args);
  while (my $row = $loop->next) {
      my $id = $$row{id};
  }
 
- my $rv = $db->nativeQuery($query, @exec_args);
+ my $rv = $db->nativeQuery($query, \@exec_args);
 
  my $loop = $db->nativeQueryLoop("UPDATE my_table SET value=? WHERE id=?");
  $loop->next([ 'one', 1]);
@@ -155,11 +155,11 @@ DBIx::Wrapper - A wrapper around the DBI
 
 =head1 DESCRIPTION
 
-DBIx::Wrapper provides a wrapper around the DBI that makes it a
-bit easier on the programmer.  This module allows you to execute
-a query with a single method call as well as make inserts easier,
-etc.  It also supports running hooks at various stages of
-processing a query (see the section on L</Hooks>).
+ DBIx::Wrapper provides a wrapper around the DBI that makes it a
+ bit easier on the programmer.  This module allows you to execute
+ a query with a single method call as well as make inserts easier,
+ etc.  It also supports running hooks at various stages of
+ processing a query (see the section on L</Hooks>).
 
 =cut
 
@@ -198,7 +198,7 @@ use Carp ();
 our $AUTOLOAD;
 our $Heavy = 0;
 
-our $VERSION = '0.24';      # update below in POD as well
+our $VERSION = '0.25';      # update below in POD as well
 
 use DBI;
 use DBIx::Wrapper::Request;
@@ -1334,7 +1334,7 @@ sub exists {
    SELECT id FROM the_table WHERE (id=5 OR id=6 OR id=7) AND the_val="ten"
 
 
- Aliases: select_from_hash
+ Aliases: select_from_hash, sfh
 
 =cut
 sub selectFromHash {
@@ -1353,6 +1353,7 @@ sub selectFromHash {
 }
 
 *select_from_hash = \&selectFromHash;
+*sfh = \&selectFromHash;
     
 sub _get_statement_handle_for_select_from_hash {
     my ($self, $table, $keys, $cols) = @_;
@@ -1457,10 +1458,10 @@ sub _get_clause_for_select_from_hash {
 
 =head2 selectFromHashMulti($table, \%keys, \@cols)
 
- Like selectFromHash(), but returns all rows in the result.
- Returns a reference to an array of hashrefs.
+Like selectFromHash(), but returns all rows in the result.
+Returns a reference to an array of hashrefs.
 
- Aliases: select_from_hash_multi
+Aliases: select_from_hash_multi, sfhm
 
 =cut
 sub selectFromHashMulti {
@@ -1476,18 +1477,19 @@ sub selectFromHashMulti {
 }
 
 *select_from_hash_multi = \&selectFromHashMulti;
+*sfhm = \&selectFromHashMulti;
 
 =pod
 
 =head2 selectAll($table, \@cols)
 
- Selects every row in the given table.  Equivalent to leaving out
- %keys when calling selectFromHashMulti(), e.g.,
- $dbh->selectFromHashMulti($table, undef, \@cols).  The simplest
- case of $dbh->selectAll($table) gets turned into something like
- "SELECT * FROM `$table`"
+Selects every row in the given table.  Equivalent to leaving out
+%keys when calling selectFromHashMulti(), e.g.,
+$dbh->selectFromHashMulti($table, undef, \@cols).  The simplest
+case of $dbh->selectAll($table) gets turned into something like
+"SELECT * FROM `$table`"
 
- Aliases: select_from_all
+Aliases: select_from_all
 
 =cut
 # version 0.22
@@ -1505,10 +1507,12 @@ sub selectAll {
 
 =head2 selectValueFromHash($table, \%keys, $col)
 
- Combination of nativeSelectValue() and selectFromHash().
- Returns the first column from the result of a query given by
- $table and %keys, as in selectFromHash().  $col is the column to
- return.
+Combination of nativeSelectValue() and selectFromHash().
+Returns the first column from the result of a query given by
+$table and %keys, as in selectFromHash().  $col is the column to
+return.
+
+Aliases: select_value_from_hash, svfh
 
 =cut
 sub selectValueFromHash {
@@ -1528,15 +1532,16 @@ sub selectValueFromHash {
 }
 
 *select_value_from_hash = \&selectValueFromHash;
+*svfh = \&selectValueFromHash;
 
 =pod
 
 =head2 selectValueFromHashMulti($table, \%keys, \@cols)
 
- Like selectValueFromhash(), but returns the first column of all
- rows in the result.
+Like selectValueFromhash(), but returns the first column of all
+rows in the result.
 
- Aliases: select_value_from_hash_multi
+Aliases: select_value_from_hash_multi, svfhm
 
 =cut
 
@@ -1554,16 +1559,17 @@ sub selectValueFromHashMulti {
 }
 
 *select_value_from_hash_multi = \&selectValueFromHashMulti;
+*svfhm = \&selectValueFromHashMulti;
 
 =pod
 
 =head2 smartUpdate($table, \%keys, \%data)
 
- Same as update(), except that a check is first made to see if
- there are any rows matching the data in %keys.  If so, update()
- is called, otherwise, insert() is called.
+Same as update(), except that a check is first made to see if
+there are any rows matching the data in %keys.  If so, update()
+is called, otherwise, insert() is called.
 
- Aliases: smart_update
+Aliases: smart_update
 
 =cut
 sub smartUpdate {
@@ -1941,7 +1947,7 @@ sub nativeSelectExecLoop {
  of a hash.  Returns undef on error.  If there are no results
  from the query, a reference to an empty array is returned.
 
- Aliases: native_select_with_array_ref
+ Aliases: native_select_with_array_ref, nswar
 
 =cut
 sub nativeSelectWithArrayRef {
@@ -1978,6 +1984,7 @@ sub nativeSelectWithArrayRef {
 *native_select_with_array_ref = \&nativeSelectArrayWithArrayRef;
 *select_native_with_array_ref = \&nativeSelectArrayWithArrayRef;
 *selectNativeArrayWithArrayRef = \&nativeSelectArrayWithArrayRef;
+*nswar = \&nativeSelectArrayWithArrayRef;
 
 =pod
 
@@ -2139,7 +2146,7 @@ sub nativeSelectMultiWithArrayRef {
  containing the first and second columns of the results as
  key/value pairs.
 
- Aliases: native_select_mapping
+ Aliases: native_select_mapping, nsm
 
 =cut
 sub nativeSelectMapping {
@@ -2154,6 +2161,7 @@ sub nativeSelectMapping {
 *native_select_mapping = \&nativeSelectMapping;
 *select_native_mapping = \&nativeSelectMapping;
 *selectNativeMapping = \&nativeSelectMapping;
+*nsm = \&nativeSelectMapping;
 
 =pod
 
@@ -2174,7 +2182,7 @@ sub nativeSelectMapping {
 
      nativeSelectDynaMapping($query, [ 0, 1 ], $exec_args).
 
- Aliases: native_select_dyna_mapping
+ Aliases: native_select_dyna_mapping, nsdm
 
 =cut
 # FIXME: return undef on error
@@ -2182,6 +2190,7 @@ sub nativeSelectDynaMapping {
     my ($self, $query, $cols, $exec_args) = @_;
 
     my ($first, $second) = @$cols;
+    my $key;
     my $map = {};
     if ($first =~ /^\d/) {
         my $rows;
@@ -2191,7 +2200,11 @@ sub nativeSelectDynaMapping {
             $rows = $self->nativeSelectMultiWithArrayRef($query);
         }
         foreach my $row (@$rows) {
-            $$map{$$row[$first]} = $$row[$second];
+            $key = $row->[$first];
+            unless (defined($key)) {
+                $key = '';
+            }
+            $map->{$key} = $row->[$second];
         }
 
     } else {
@@ -2202,7 +2215,11 @@ sub nativeSelectDynaMapping {
             $rows = $self->nativeSelectMulti($query);
         }
         foreach my $row (@$rows) {
-            $$map{$$row{$first}} = $$row{$second};
+            $key = $row->{$first};
+            unless (defined($key)) {
+                $key = '';
+            }
+            $map->{$key} = $row->{$second};
         }
     }
         
@@ -2212,6 +2229,7 @@ sub nativeSelectDynaMapping {
 *native_select_dyna_mapping = \&nativeSelectDynaMapping;
 *select_native_dyna_mapping = \&nativeSelectDynaMapping;
 *selectNativeDynaMapping = \&nativeSelectDynaMapping;
+*nsdm = \&nativeSelectDynaMapping;
 
 =pod
 
@@ -3786,6 +3804,338 @@ sub _bdecode {
     return;
 }
 
+=pod
+
+=head3 to_json($data)
+
+ Returns the JSON representation of $data (arbitrary
+ datastructure -- but not objects).  See http://www.json.org/ or
+ http://en.wikipedia.org/wiki/JSON for details.  In this
+ implementation, hash keys are sorted so that the output is
+ consistent.
+
+=cut
+sub to_json {
+    my $self = shift;
+    my $data = shift;
+
+    return 'null' unless defined $data;
+    
+    my $type = reftype($data);
+    unless (defined($type)) {
+        return $self->_escape_json_str($data);
+    }
+    
+    if ($type eq 'ARRAY') {
+        return '[' . join(',', map { $self->to_json($_) } @$data) . ']';
+    }
+    elsif ($type eq 'HASH') {
+        my @keys = sort keys %$data;
+        return '{' . join(',', map { $self->_escape_json_str($_) . ':'
+                                         . $self->to_json($data->{$_}) } @keys ) . '}';
+    }
+    else {
+        return $self->_escape_json_str($data);
+    }
+}
+*toJson = \&to_json;
+
+sub _escape_json_str {
+    my $self = shift;
+    my $str = shift;
+
+    return 'null' unless defined $str;
+
+    # \b means word boundary in a regex, so create it here in a
+    # string, then interpolate
+    my $backspace = quotemeta("\b");
+
+    $str =~ s{([\"\\/])}{\\$1}g;
+    $str =~ s{$backspace}{\\b}g;
+    $str =~ s{\f}{\\f}g;
+    $str =~ s{\x0a}{\\n}g;
+    $str =~ s{\x0d}{\\r}g;
+    $str =~ s{\t}{\\t}g;
+    $str =~ s{([^\x00-\xff])}{sprintf "\\u%04x", ord($1)}eg;
+
+    return '"' . $str . '"';
+}
+
+sub from_json {
+    my $self = shift;
+
+    return _parse_json($_[0]);
+}
+
+{
+    my $to_parse;
+    my $len;
+    my $char;
+    my $pos;
+    my $looking_at;
+    my $json_warn = 1;
+
+    my $json_escape_map = { b => "\b",
+                            t => "\t",
+                            n => "\x0a",
+                            r => "\x0d",
+                            f => "\x0c",
+                            '\\' => '\\',
+                          };
+
+    my $json_bareword_map = { true => 1,
+                              false => 0,
+                              null => undef,
+                            };
+    
+    sub _parse_json {
+        $to_parse = shift;
+        $len = length($to_parse);
+        $char = '';
+        $pos = 0;
+        $looking_at = -1;
+
+        return _parse_json_parse_value();
+    }
+
+    sub _parse_json_next_char {
+        return $char = undef if ($pos >= $len);
+        $char = substr($to_parse, $pos, 1);
+        $looking_at = $pos;
+        $pos++;
+        
+        return $char;
+    }
+
+    sub _parse_json_peek {
+        my $count = shift;
+        if ($count > $len - $pos) {
+            return $char = substr($to_parse, $pos, $len - $pos);
+        }
+        return $char = substr($to_parse, $pos + 1, $count);
+    }
+
+    # eat whitespace and comments
+    sub _parse_json_eat_whitespace {
+        while (defined($char)) {
+            if ($char =~ /\s/ or $char eq '') {
+                _parse_json_next_char();
+            }
+            elsif ($char eq '/') {
+                _parse_json_next_char();
+                if ($char eq '/') {
+                    # single line comment
+                    1 while (defined(_parse_json_next_char()) and $char ne "\n" and $char ne "\r");
+                }
+                elsif ($char eq '*') {
+                    # multiple line comment
+                    _parse_json_next_char();
+                    while (1) {
+                        unless (defined($char)) {
+                            # error - unterminated comment
+                            last;
+                        }
+
+                        if ($char eq '*') {
+                            if (defined(_parse_json_next_char()) and $char eq '/') {
+                                _parse_json_next_char();
+                                last;
+                            }
+                        }
+                        else {
+                            _parse_json_next_char();
+                        }
+                        
+                    }
+                    next;
+                }
+                else {
+                    # error -- syntax error with comment -- can't have '/' by itself
+                }
+            }
+            else {
+                last;
+            }
+        }
+    }
+    
+    sub _parse_json_parse_string {
+        unless ($char eq '"' or $char eq "'") {
+            warn "bad string at pos $looking_at, char=$char";
+            return;
+        }
+
+        my $boundary = $char;
+        my $str = '';
+        my $start_pos = $looking_at;
+
+        while ( defined(_parse_json_next_char()) ) {
+            if ($char eq $boundary) {
+                _parse_json_next_char();
+                return $str;
+            }
+            elsif ($char eq '\\') {
+                _parse_json_next_char();
+                if (exists($json_escape_map->{$char})) {
+                    $str .= $json_escape_map->{$char};
+                }
+                elsif ($char eq 'u') {
+                    my $u = '';
+
+                    for (1 .. 4) {
+                        _parse_json_next_char();
+
+                        if ($char !~ /[0-9A-Fa-f]/) {
+                            # error -- bad unicode specifier
+                            if ($json_warn) {
+                                warn "bad unicode specifier at pos $looking_at, char=$char";
+                            }
+                            last;
+                        }
+                        $u .= $char;
+                    }
+
+                    my $full_char = chr(hex($u));
+                    $str .= $full_char;
+                }
+                else {
+                    $str .= $char;
+                }
+            }
+            else {
+                $str .= $char;
+            }
+        }
+
+        # error -- unterminated string
+        warn "unterminated string starting at $start_pos";
+    }
+
+    sub _parse_json_parse_object {
+        return unless $char eq '{';
+
+        my $obj = {};
+        my $key;
+        
+        _parse_json_next_char();
+        _parse_json_eat_whitespace();
+        if ($char eq '}') {
+            _parse_json_next_char();
+            return $obj;
+        }
+
+        while (defined($char)) {
+            $key = _parse_json_parse_string();
+            _parse_json_eat_whitespace();
+            
+            unless ($char eq ':') {
+                last;
+            }
+
+            _parse_json_next_char();
+            _parse_json_eat_whitespace();
+            $obj->{$key} = _parse_json_parse_value();
+            _parse_json_eat_whitespace();
+
+            if ($char eq '}') {
+                _parse_json_next_char();
+                return $obj;
+            }
+            elsif ($char eq ',') {
+                _parse_json_next_char();
+                _parse_json_eat_whitespace();
+            }
+            else {
+                last;
+            }
+        }
+
+        warn "bad object at pos $looking_at, char=$char" if $json_warn;
+    }
+
+    sub _parse_json_parse_array {
+        return unless $char eq '[';
+        my @array;
+        my $val;
+
+        _parse_json_next_char();
+        _parse_json_eat_whitespace();
+        if ($char eq ']') {
+            return \@array;
+        }
+
+        while (defined($char)) {
+            $val = _parse_json_parse_value();
+            push @array, $val;
+            _parse_json_eat_whitespace();
+            if ($char eq ']') {
+                _parse_json_next_char();
+                return \@array;
+            }
+            elsif ($char eq ',') {
+                _parse_json_next_char();
+                _parse_json_eat_whitespace();
+            }
+            else {
+                last;
+            }
+        }
+
+        warn "bad array: pos $looking_at, char=$char" if $json_warn;
+        return;
+    }
+
+    sub _parse_json_parse_number {
+        my $num = '';
+
+        if ($char eq '0') {
+            $num .= $char;
+            my $hex = _parse_json_peek(1) =~ /[Xx]/;
+            _parse_json_next_char();
+            
+            while (defined($char) and $char !~ /[[:space:],\}\]:]/) {
+                $num .= $char;
+                _parse_json_next_char();
+            }
+
+            return $hex ? hex($num) : oct($num);
+        }
+
+        while (defined($char) and $char !~ /[[:space:],\}\]:]/) {
+            $num .= $char;
+            _parse_json_next_char();
+        }
+
+        return 0 + $num;
+    }
+
+    sub _parse_json_parse_word {
+        my $word = '';
+        while ($char !~ /[[:space:]\]\},:]/) {
+            $word .= $char;
+            _parse_json_next_char();
+        }
+
+        if (exists($json_bareword_map->{$word})) {
+            return $json_bareword_map->{$word};
+        }
+
+        warn "syntax error at char $looking_at: char='$char', word='$word'" if $json_warn;
+        return;
+    }
+
+    sub _parse_json_parse_value {
+        _parse_json_eat_whitespace();
+        return unless defined($char);
+        return _parse_json_parse_object() if $char eq '{';
+        return _parse_json_parse_array() if $char eq '[';
+        return _parse_json_parse_string() if $char eq '"' or $char eq "'";
+        return _parse_json_parse_number() if $char eq '-';
+        return $char =~ /\d/ ? _parse_json_parse_number() : _parse_json_parse_word();
+    }
+
+}
+
 sub _do_benchmark {
     my $self = shift;
     
@@ -3857,7 +4207,7 @@ PURPOSE.
 
 =head1 VERSION
 
-    0.24
+    0.25
 
 =cut
 

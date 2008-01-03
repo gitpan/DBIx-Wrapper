@@ -71,12 +71,12 @@ SYNOPSIS
      my $row = $db->abstractSelect($table, \@fields, \%where, \@order);
      my $rows = $db->abstractSelectMulti($table, \@fields, \%where, \@order);
 
-     my $loop = $db->nativeSelectLoop($query, @exec_args);
+     my $loop = $db->nativeSelectLoop($query, \@exec_args);
      while (my $row = $loop->next) {
          my $id = $$row{id};
      }
 
-     my $rv = $db->nativeQuery($query, @exec_args);
+     my $rv = $db->nativeQuery($query, \@exec_args);
 
      my $loop = $db->nativeQueryLoop("UPDATE my_table SET value=? WHERE id=?");
      $loop->next([ 'one', 1]);
@@ -121,11 +121,11 @@ SYNOPSIS
      support placeholders, named placeholders will not help you.
 
 DESCRIPTION
-    DBIx::Wrapper provides a wrapper around the DBI that makes it a bit
-    easier on the programmer. This module allows you to execute a query with
-    a single method call as well as make inserts easier, etc. It also
-    supports running hooks at various stages of processing a query (see the
-    section on "Hooks").
+     DBIx::Wrapper provides a wrapper around the DBI that makes it a
+     bit easier on the programmer.  This module allows you to execute
+     a query with a single method call as well as make inserts easier,
+     etc.  It also supports running hooks at various stages of
+     processing a query (see the section on L</Hooks>).
 
 METHODS
     Following are DBIx::Wrapper methods. Any undocumented methods should be
@@ -399,41 +399,42 @@ METHODS
 
        SELECT id FROM the_table WHERE (id=5 OR id=6 OR id=7) AND the_val="ten"
 
-     Aliases: select_from_hash
+     Aliases: select_from_hash, sfh
 
   selectFromHashMulti($table, \%keys, \@cols)
-     Like selectFromHash(), but returns all rows in the result.
-     Returns a reference to an array of hashrefs.
+    Like selectFromHash(), but returns all rows in the result. Returns a
+    reference to an array of hashrefs.
 
-     Aliases: select_from_hash_multi
+    Aliases: select_from_hash_multi, sfhm
 
   selectAll($table, \@cols)
-     Selects every row in the given table.  Equivalent to leaving out
-     %keys when calling selectFromHashMulti(), e.g.,
-     $dbh->selectFromHashMulti($table, undef, \@cols).  The simplest
-     case of $dbh->selectAll($table) gets turned into something like
-     "SELECT * FROM `$table`"
+    Selects every row in the given table. Equivalent to leaving out %keys
+    when calling selectFromHashMulti(), e.g.,
+    $dbh->selectFromHashMulti($table, undef, \@cols). The simplest case of
+    $dbh->selectAll($table) gets turned into something like "SELECT * FROM
+    `$table`"
 
-     Aliases: select_from_all
+    Aliases: select_from_all
 
   selectValueFromHash($table, \%keys, $col)
-     Combination of nativeSelectValue() and selectFromHash().
-     Returns the first column from the result of a query given by
-     $table and %keys, as in selectFromHash().  $col is the column to
-     return.
+    Combination of nativeSelectValue() and selectFromHash(). Returns the
+    first column from the result of a query given by $table and %keys, as in
+    selectFromHash(). $col is the column to return.
+
+    Aliases: select_value_from_hash, svfh
 
   selectValueFromHashMulti($table, \%keys, \@cols)
-     Like selectValueFromhash(), but returns the first column of all
-     rows in the result.
+    Like selectValueFromhash(), but returns the first column of all rows in
+    the result.
 
-     Aliases: select_value_from_hash_multi
+    Aliases: select_value_from_hash_multi, svfhm
 
   smartUpdate($table, \%keys, \%data)
-     Same as update(), except that a check is first made to see if
-     there are any rows matching the data in %keys.  If so, update()
-     is called, otherwise, insert() is called.
+    Same as update(), except that a check is first made to see if there are
+    any rows matching the data in %keys. If so, update() is called,
+    otherwise, insert() is called.
 
-     Aliases: smart_update
+    Aliases: smart_update
 
   nativeSelect($query, \@exec_args)
      Executes the query in $query and returns a single row result (as
@@ -464,7 +465,7 @@ METHODS
      of a hash.  Returns undef on error.  If there are no results
      from the query, a reference to an empty array is returned.
 
-     Aliases: native_select_with_array_ref
+     Aliases: native_select_with_array_ref, nswar
 
   nativeSelectMulti($query, \@exec_args)
      Executes the query in $query and returns an array of rows, where
@@ -498,7 +499,7 @@ METHODS
      containing the first and second columns of the results as
      key/value pairs.
 
-     Aliases: native_select_mapping
+     Aliases: native_select_mapping, nsm
 
   nativeSelectDynaMapping($query, \@cols, \@exec_args)
      Similar to nativeSelectMapping() except you specify which
@@ -516,7 +517,7 @@ METHODS
 
          nativeSelectDynaMapping($query, [ 0, 1 ], $exec_args).
 
-     Aliases: native_select_dyna_mapping
+     Aliases: native_select_dyna_mapping, nsdm
 
   nativeSelectRecordMapping($query, \@exec_args)
      Similar to nativeSelectMapping(), except the values in the hash
@@ -789,6 +790,13 @@ METHODS
 
      Aliases: bDecode()
 
+   to_json($data)
+     Returns the JSON representation of $data (arbitrary
+     datastructure -- but not objects).  See http://www.json.org/ or
+     http://en.wikipedia.org/wiki/JSON for details.  In this
+     implementation, hash keys are sorted so that the output is
+     consistent.
+
   There are also underscore_separated versions of these methods.
         E.g., nativeSelectLoop() becomes native_select_loop()
 
@@ -820,5 +828,5 @@ SEE ALSO
         DBI, perl
 
 VERSION
-        0.24
+        0.25
 

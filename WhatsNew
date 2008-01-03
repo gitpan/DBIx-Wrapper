@@ -1,3 +1,13 @@
+Version 0.25
+	* Fixed docs for nativeSelectLoop() and nativeQuery()
+	* In nativeSelectDynaMapping(), check that the hash keys for
+          the return hash are defined, otherwise, use an empty string
+          as the key
+
+	* Added short aliases for selectFromHash, selectFromHashMulti,
+          nativeSelectMapping, nativeSelectDynaMapping,
+          selectValueFromHash, selectValueFromHashMulti, nativeSelectWithArrayRef
+
 Version 0.24
 	* Added the to_csv() method
 	* Added the to_xml() method

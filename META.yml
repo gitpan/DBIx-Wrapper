@@ -1,11 +1,14 @@
-# http://module-build.sourceforge.net/META-spec.html
-#XXXXXXX This is a prototype!!!  It will change in the future!!! XXXXX#
-name:         DBIx-Wrapper
-version:      0.24
-version_from: lib/DBIx/Wrapper.pm
-installdirs:  site
-requires:
+--- #YAML:1.0
+name:                DBIx-Wrapper
+version:             0.25
+abstract:            Wrapper Module for the DBI
+license:             ~
+generated_by:        ExtUtils::MakeMaker version 6.36
+distribution_type:   module
+requires:     
     DBI:                           0
-
-distribution_type: module
-generated_by: ExtUtils::MakeMaker version 6.17
+meta-spec:
+    url:     http://module-build.sourceforge.net/META-spec-v1.2.html
+    version: 1.2
+author:
+    - DON OWENS <don@owensnet.com>
