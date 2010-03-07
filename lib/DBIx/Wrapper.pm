@@ -2,9 +2,9 @@
 # Creation date: 2003-03-30 12:17:42
 # Authors: Don
 # Change log:
-# $Id: Wrapper.pm,v 1.80 2008/01/03 03:04:27 don Exp $
+# $Revision: 1467 $
 #
-# Copyright (c) 2003-2008 Don Owens
+# Copyright (c) 2003-2010 Don Owens (don@regexguy.com)
 #
 # All rights reserved. This program is free software; you can
 # redistribute it and/or modify it under the same terms as Perl
@@ -129,37 +129,37 @@ DBIx::Wrapper - A wrapper around the DBI
 
 =head2 Attributes
 
- Attributes accessed in DBIx::Wrapper object via hash access are
- passed on or retrieved from the underlying DBI object, e.g.,
+Attributes accessed in DBIx::Wrapper object via hash access are
+passed on or retrieved from the underlying DBI object, e.g.,
 
  $dbi_obj->{RaiseError} = 1
 
 =head2 Named Placeholders
 
- All native* methods (except for nativeSelectExecLoop) support
- named placeholders.  That is, instead of using ? as a
- placeholder, you can use :name, where name is the name of a key
- in the hash passed to the method.  To use named placeholders,
- pass a hash reference containing the values in place of the
- @exec_args argument.  E.g.,
+All native* methods (except for nativeSelectExecLoop) support
+named placeholders.  That is, instead of using ? as a
+placeholder, you can use :name, where name is the name of a key
+in the hash passed to the method.  To use named placeholders,
+pass a hash reference containing the values in place of the
+@exec_args argument.  E.g.,
 
  my $row = $db->nativeSelect("SELECT * FROM test_table WHERE id=:id", { id => 1 });
 
- :: in the query string gets converted to : so you can include
- literal colons in the query.  :"var name" and :'var name' are
- also supported so you can use variable names containing spaces.
+:: in the query string gets converted to : so you can include
+literal colons in the query.  :"var name" and :'var name' are
+also supported so you can use variable names containing spaces.
 
- The implementation uses ? as placeholders under the hood so that
- quoting is done properly.  So if your database driver does not
- support placeholders, named placeholders will not help you.
+The implementation uses ? as placeholders under the hood so that
+quoting is done properly.  So if your database driver does not
+support placeholders, named placeholders will not help you.
 
 =head1 DESCRIPTION
 
- DBIx::Wrapper provides a wrapper around the DBI that makes it a
- bit easier on the programmer.  This module allows you to execute
- a query with a single method call as well as make inserts easier,
- etc.  It also supports running hooks at various stages of
- processing a query (see the section on L</Hooks>).
+DBIx::Wrapper provides a wrapper around the DBI that makes it a
+bit easier on the programmer.  This module allows you to execute
+a query with a single method call as well as make inserts easier,
+etc.  It also supports running hooks at various stages of
+processing a query (see the section on L</Hooks>).
 
 =cut
 
@@ -185,6 +185,7 @@ should be considered private.
 =cut
 
 use strict;
+use Data::Dumper ();
 
 package DBIx::Wrapper;
 
@@ -198,7 +199,7 @@ use Carp ();
 our $AUTOLOAD;
 our $Heavy = 0;
 
-our $VERSION = '0.25';      # update below in POD as well
+our $VERSION = '0.26';      # update below in POD as well
 
 use DBI;
 use DBIx::Wrapper::Request;
@@ -304,31 +305,31 @@ sub import {
 
 =pod
 
-=head2 connect($data_source, $username, $auth, \%attr, \%params)
+=head2 C<connect($data_source, $username, $auth, \%attr, \%params)>
 
- Connects to the given database.  The first four parameters are
- the same parameters you would pass to the connect call when
- using DBI directly.  If $data_source is a hash, it will generate
- the dsn for DBI using the values for the keys driver, database,
- host, port.
+Connects to the given database.  The first four parameters are
+the same parameters you would pass to the connect call when
+using DBI directly.  If $data_source is a hash, it will generate
+the dsn for DBI using the values for the keys driver, database,
+host, port.
 
- The %params hash is optional and contains extra parameters to
- control the behaviour of DBIx::Wrapper itself.  Following are
- the valid parameters.
+The %params hash is optional and contains extra parameters to
+control the behaviour of DBIx::Wrapper itself.  Following are
+the valid parameters.
 
 =over 4
 
 =item error_handler and debug_handler
 
- These values should either be a reference to a subroutine, or a
- reference to an array whose first element is an object and whose
- second element is a method name to call on that object.  The
- parameters passed to the error_handler callback are the current
- DBIx::Wrapper object and an error string, usually the query if
- appropriate.  The parameters passed to the debug_handler
- callback are the current DBIx::Wrapper object, an error string,
- and the filehandle passed to the debugOn() method (defaults to
- STDERR).  E.g.,
+These values should either be a reference to a subroutine, or a
+reference to an array whose first element is an object and whose
+second element is a method name to call on that object.  The
+parameters passed to the error_handler callback are the current
+DBIx::Wrapper object and an error string, usually the query if
+appropriate.  The parameters passed to the debug_handler
+callback are the current DBIx::Wrapper object, an error string,
+and the filehandle passed to the debugOn() method (defaults to
+STDERR).  E.g.,
 
   sub do_error {
       my ($db, $str) = @_;
@@ -347,16 +348,16 @@ sub import {
 
 =item db_style
 
- Used to control some database specific logic.  The default value
- is 'mysql'.  Currently, this is only used for the
- getLastInsertId() method.  MSSQL is supported with a value of
- mssql for this parameter.
+Used to control some database specific logic.  The default value
+is 'mysql'.  Currently, this is only used for the
+getLastInsertId() method.  MSSQL is supported with a value of
+mssql for this parameter.
 
 =item heavy
 
- If set to a true value, any hashes returned will actually be
- objects on which you can call methods to get the values back.
- E.g.,
+If set to a true value, any hashes returned will actually be
+objects on which you can call methods to get the values back.
+E.g.,
 
   my $row = $db->nativeSelect($query);
   my $id = $row->id;
@@ -365,17 +366,17 @@ sub import {
 
 =item no_placeholders
 
- If you are unfortunate enough to be using a database that does
- not support placeholders, you can set no_placeholders to a true
- value here.  For non native* methods that generate SQL on their
- own, placeholders are normally used to ensure proper quoting of
- values.  If you set no_placeholders to a true value, DBI's
- quote() method will be used to quote the values instead of using
- placeholders.
+If you are unfortunate enough to be using a database that does
+not support placeholders, you can set no_placeholders to a true
+value here.  For non native* methods that generate SQL on their
+own, placeholders are normally used to ensure proper quoting of
+values.  If you set no_placeholders to a true value, DBI's
+quote() method will be used to quote the values instead of using
+placeholders.
 
 =back
 
-=head2 new($data_source, $username, $auth, \%attr, \%params)
+=head2 C<new($data_source, $username, $auth, \%attr, \%params)>
 
  An alias for connect().
 
@@ -439,23 +440,23 @@ sub connect {
 
 =pod
 
-=head2 connect_from_config($db_key, $config_file, \%params)
+=head2 C<connect_from_config($db_key, $config_file, \%params)>
 
- Like connect(), but the parameters used to connect are taken
- from the given configuration file.  The Config::General module
- must be present for this method to work (it is loaded as
- needed).  $config_file should be the path to a configuration
- file in an Apache-style format.  $db_key is the name of the
- container with the database connection information you wish to
- use.  The %params hash is optional and contains extra parameters
- to control the behaviour of DBIx::Wrapper itself.
+Like connect(), but the parameters used to connect are taken
+from the given configuration file.  The Config::General module
+must be present for this method to work (it is loaded as
+needed).  $config_file should be the path to a configuration
+file in an Apache-style format.  $db_key is the name of the
+container with the database connection information you wish to
+use.  The %params hash is optional and contains extra parameters
+to control the behaviour of DBIx::Wrapper itself.
 
- Following is an example configuration file.  Note that the dsn
- can be specified either as a container with each piece named
- separately, or as an option whose value is the full dsn that
- should be based to the underlying DBI object.  Each db container
- specifies one database connection.  Note that, unlike Apache,
- the containers and option names are case-sensitive.
+Following is an example configuration file.  Note that the dsn
+can be specified either as a container with each piece named
+separately, or as an option whose value is the full dsn that
+should be based to the underlying DBI object.  Each db container
+specifies one database connection.  Note that, unlike Apache,
+the containers and option names are case-sensitive.
 
     <db test_db_key>
         <dsn>
@@ -482,7 +483,7 @@ sub connect {
     </db>
 
 
- Configuration features from Config::General supported:
+Configuration features from Config::General supported:
 
    * Perl style comments
    * C-style comments
@@ -573,11 +574,11 @@ sub _load_config_general {
 
 =pod
 
-=head2 reconnect()
+=head2 C<reconnect()>
 
- Reconnect to the database using the same parameters that were
- given to the connect() method.  It does not try to disconnect
- before attempting to connect again.
+Reconnect to the database using the same parameters that were
+given to the connect() method.  It does not try to disconnect
+before attempting to connect again.
 
 =cut
 sub reconnect {
@@ -597,10 +598,10 @@ sub reconnect {
 
 =pod
 
-=head2 disconnect()
+=head2 C<disconnect()>
 
- Disconnect from the database.  This disconnects and frees up the
- underlying DBI object.
+Disconnect from the database.  This disconnects and frees up the
+underlying DBI object.
 
 =cut
 sub disconnect {
@@ -616,9 +617,9 @@ sub disconnect {
 
 =head2 connectOne(\@cfg_list, \%attr)
 
- Connects to a random database out of the list.  This is useful
- for connecting to a slave database out of a group for read-only
- access.  Ths list should look similar to the following:
+Connects to a random database out of the list.  This is useful
+for connecting to a slave database out of a group for read-only
+access.  Ths list should look similar to the following:
 
     my $cfg_list = [ { driver => 'mysql',
                        host => 'db0.example.com',
@@ -640,17 +641,17 @@ sub disconnect {
                      },
                    ];
 
- where the weight fields are optional (defaulting to 1).  The
- attr field is also optional and corresponds to the 4th argument
- to DBI's connect() method.  The \%attr passed to this method is
- an optional parameter specifying the defaults for \%attr to be
- passed to the connect() method.  The attr field in the config
- for each database in the list overrides any in the \%attr
- parameter passed into the method.
+where the weight fields are optional (defaulting to 1).  The
+attr field is also optional and corresponds to the 4th argument
+to DBI's connect() method.  The \%attr passed to this method is
+an optional parameter specifying the defaults for \%attr to be
+passed to the connect() method.  The attr field in the config
+for each database in the list overrides any in the \%attr
+parameter passed into the method.
 
- You may also pass the DSN string for the connect() method as the
- 'dsn' field in each config instead of the separate driver, host,
- port, and database fields, e.g.,
+You may also pass the DSN string for the connect() method as the
+'dsn' field in each config instead of the separate driver, host,
+port, and database fields, e.g.,
 
     my $cfg_list = [ { dsn => 'dbi:mysql:host=db0.example.com;database=MyDB;port=3306',
                        user => 'dbuser',
@@ -660,7 +661,7 @@ sub disconnect {
                      },
                    ];
 
- Aliases: connect_one
+Aliases: connect_one
 
 =cut
 sub connect_one {
@@ -756,14 +757,14 @@ sub getDebugLevel {
 
 =pod
 
-=head2 newFromDBI($dbh)
+=head2 C<newFromDBI($dbh)>
 
- Returns a new DBIx::Wrapper object from a DBI object that has
- already been created.  Note that when created this way,
- disconnect() will not be called automatically on the underlying
- DBI object when the DBIx::Wrapper object goes out of scope.
+Returns a new DBIx::Wrapper object from a DBI object that has
+already been created.  Note that when created this way,
+disconnect() will not be called automatically on the underlying
+DBI object when the DBIx::Wrapper object goes out of scope.
 
- Aliases: new_from_dbi
+Aliases: new_from_dbi
 
 =cut
 sub newFromDBI {
@@ -778,7 +779,7 @@ sub newFromDBI {
 
 =pod
 
-=head2 getDBI()
+=head2 C<getDBI()>
 
 Return the underlying DBI object used to query the database.
 
@@ -838,12 +839,12 @@ sub _insert_replace {
 
 =pod
 
-=head2 insert($table, \%data)
+=head2 C<insert($table, \%data)>
 
- Insert the provided row into the database.  $table is the name
- of the table you want to insert into.  %data is the data you
- want to insert -- a hash with key/value pairs representing a row
- to be insert into the database.
+Insert the provided row into the database.  $table is the name
+of the table you want to insert into.  %data is the data you
+want to insert -- a hash with key/value pairs representing a row
+to be insert into the database.
 
 =cut
 sub insert {
@@ -853,10 +854,10 @@ sub insert {
 
 =pod
 
-=head2 replace($table, \%data)
+=head2 C<replace($table, \%data)>
 
- Same as insert(), except does a REPLACE instead of an INSERT for
- databases which support it.
+Same as insert(), except does a REPLACE instead of an INSERT for
+databases which support it.
 
 =cut
 sub replace {
@@ -872,18 +873,18 @@ sub replace {
 
 =pod
 
-=head2 smartReplace($table, \%data)
+=head2 C<smartReplace($table, \%data)>
 
- This method is MySQL specific.  If $table has an auto_increment
- column, the return value will be the value of the auto_increment
- column.  So if that column was specified in \%data, that value
- will be returned, otherwise, an insert will be performed and the
- value of LAST_INSERT_ID() will be returned.  If there is no
- auto_increment column, but primary keys are provided, the row
- containing the primary keys will be returned.  Otherwise, a true
- value will be returned upon success.
+This method is MySQL specific.  If $table has an auto_increment
+column, the return value will be the value of the auto_increment
+column.  So if that column was specified in \%data, that value
+will be returned, otherwise, an insert will be performed and the
+value of LAST_INSERT_ID() will be returned.  If there is no
+auto_increment column, but primary keys are provided, the row
+containing the primary keys will be returned.  Otherwise, a true
+value will be returned upon success.
 
- Aliases: smart_replace
+Aliases: smart_replace
 
 =cut
 sub smartReplace {
@@ -952,19 +953,19 @@ sub smartReplace {
 
 =pod
 
-=head2 delete($table, \%keys), delete($table, \@keys)
+=head2 C<delete($table, \%keys), delete($table, \@keys)>
 
- Delete rows from table $table using the key/value pairs in %keys
- to specify the WHERE clause of the query.  Multiple key/value
- pairs are joined with 'AND' in the WHERE clause.  The cols
- parameter can optionally be an array ref instead of a hashref.
- E.g.
+Delete rows from table $table using the key/value pairs in %keys
+to specify the WHERE clause of the query.  Multiple key/value
+pairs are joined with 'AND' in the WHERE clause.  The cols
+parameter can optionally be an array ref instead of a hashref.
+E.g.
 
      $db->delete($table, [ key1 => $val1, key2 => $val2 ])
 
- This is so that the order of the parameters in the WHERE clause
- are kept in the same order.  This is required to use the correct
- multi field indexes in some databases.
+This is so that the order of the parameters in the WHERE clause
+are kept in the same order.  This is required to use the correct
+multi field indexes in some databases.
 
 =cut
 sub delete {
@@ -1051,6 +1052,19 @@ sub _get_catalog_separator {
     return shift()->_get_quote_chars()->[1];
 }
 
+# don't quote if is a reference to a scalar
+sub _maybe_quote_field_name {
+    my ($self, $field) = @_;
+
+    my $ref = ref($field);
+    if ($ref and $ref eq 'SCALAR') {
+        return $$field;
+    }
+    else {
+        return $self->_quote_field_name($field);
+    }
+}
+
 sub _quote_field_name {
     my $self = shift;
     my $field = shift;
@@ -1091,18 +1105,18 @@ sub _quote_table {
 
 =pod
 
-=head2 update($table, \%keys, \%data), update($table, \@keys, \%data)
+=head2 C<update($table, \%keys, \%data), update($table, \@keys, \%data)>
 
- Update the table using the key/value pairs in %keys to specify
- the WHERE clause of the query.  %data contains the new values
- for the row(s) in the database.  The keys parameter can
- optionally be an array ref instead of a hashref.  E.g.,
+Update the table using the key/value pairs in %keys to specify
+the WHERE clause of the query.  %data contains the new values
+for the row(s) in the database.  The keys parameter can
+optionally be an array ref instead of a hashref.  E.g.,
 
      $db->update($table, [ key1 => $val1, key2 => $val2 ], \%data);
 
- This is so that the order of the parameters in the WHERE clause
- are kept in the same order.  This is required to use the correct
- multi field indexes in some databases.
+This is so that the order of the parameters in the WHERE clause
+are kept in the same order.  This is required to use the correct
+multi field indexes in some databases.
 
 =cut
 sub update {
@@ -1277,11 +1291,11 @@ sub _equals_or_is_null {
 
 =pod
 
-=head2 exists($table, \%keys)
+=head2 C<exists($table, \%keys)>
 
- Returns true if one or more records exist with the given column
- values in %keys.  %keys can be recursive as in the
- selectFromHash() method.
+Returns true if one or more records exist with the given column
+values in %keys.  %keys can be recursive as in the
+selectFromHash() method.
 
 =cut
 sub exists {
@@ -1289,7 +1303,10 @@ sub exists {
     my $table = shift;
     my $keys = shift;
 
-    my $row = $self->select_from_hash($table, $keys, [ keys %$keys ]->[0]);
+    my $row = $self->select_from_hash($table, $keys, [ [ keys %$keys ]->[0] ]);
+    # my $row = $self->select_from_hash($table, $keys);
+    # print STDERR "\n\n=====> exists: " . Data::Dumper->Dump([ $row ], [ 'row' ]) . "\n\n";
+
     if ($row and %$row) {
         return 1;
     }
@@ -1298,43 +1315,43 @@ sub exists {
 
 =pod
 
-=head2 selectFromHash($table, \%keys, \@cols);
+=head2 C<selectFromHash($table, \%keys, \@cols);>
 
- Select from table $table using the key/value pairs in %keys to
- specify the WHERE clause of the query.  Multiple key/value pairs
- are joined with 'AND' in the WHERE clause.  Returns a single row
- as a hashref.  If %keys is empty or not passed, it is treated as
- "SELECT * FROM $table" with no WHERE clause.  @cols is a list of
- columns you want back.  If nothing is passed in @cols, all
- columns will be returned.
+Select from table $table using the key/value pairs in %keys to
+specify the WHERE clause of the query.  Multiple key/value pairs
+are joined with 'AND' in the WHERE clause.  Returns a single row
+as a hashref.  If %keys is empty or not passed, it is treated as
+"SELECT * FROM $table" with no WHERE clause.  @cols is a list of
+columns you want back.  If nothing is passed in @cols, all
+columns will be returned.
 
- If a value in the %keys hash is an array ref, the resulting
- query will search for records with any of those values. E.g.,
+If a value in the %keys hash is an array ref, the resulting
+query will search for records with any of those values. E.g.,
 
    my $row = $db->selectFromHash('the_table', { id => [ 5, 6, 7 ] });
 
- will result in a query like
+will result in a query like
 
    SELECT * FROM the_table WHERE (id=5 OR id=6 OR id=7)
 
- The call
+The call
 
    my $row = $db->selectFromHash('the_table', { id => [ 5, 6, 7 ], the_val => 'ten' });
 
- will result in a query like
+will result in a query like
 
    SELECT * FROM the_table WHERE (id=5 OR id=6 OR id=7) AND the_val="ten"
 
- or, if a value was passed in for \@cols, e.g.,
+or, if a value was passed in for \@cols, e.g.,
 
    my $row = $db->selectFromHash('the_table', { id => [ 5, 6, 7 ], the_val => 'ten' }, [ 'id' ]);
 
- the resulting query would be
+the resulting query would be
 
    SELECT id FROM the_table WHERE (id=5 OR id=6 OR id=7) AND the_val="ten"
 
 
- Aliases: select_from_hash, sfh
+Aliases: select_from_hash, sfh
 
 =cut
 sub selectFromHash {
@@ -1354,15 +1371,28 @@ sub selectFromHash {
 
 *select_from_hash = \&selectFromHash;
 *sfh = \&selectFromHash;
-    
+
 sub _get_statement_handle_for_select_from_hash {
+    my ($self, $table, $keys, $cols) = @_;
+
+    my ($query, $exec_args) = $self->_get_query_for_select_from_hash($table, $keys, $cols);
+
+    if ($exec_args) {
+        return $self->_getStatementHandleForQuery($query, $exec_args);
+    }
+    else {
+        return $self->_getStatementHandleForQuery($query);
+    }
+}
+
+sub _get_query_for_select_from_hash {
     my ($self, $table, $keys, $cols) = @_;
     my $query;
 
     my $col_list = '*';
     if (ref($cols) eq 'ARRAY') {
         if (@$cols) {
-            $col_list = join(',', map { $self->_quote_field_name($_) } @$cols);
+            $col_list = join(',', map { $self->_maybe_quote_field_name($_) } @$cols);
         }
     } elsif (defined($cols) and $cols ne '') {
         $col_list = $self->_quote_field_name($cols);
@@ -1371,11 +1401,9 @@ sub _get_statement_handle_for_select_from_hash {
     my $sf_table = $self->_quote_table($table);
     if ($keys and ((ref($keys) eq 'HASH' and %$keys) or (ref($keys) eq 'ARRAY' and @$keys))) {
         my ($where, $exec_args) = $self->_get_clause_for_select_from_hash($keys);
-        $query = qq{SELECT $col_list FROM $sf_table WHERE $where};
-        return $self->_getStatementHandleForQuery($query, $exec_args);
+        return (qq{SELECT $col_list FROM $sf_table WHERE $where}, $exec_args);
     } else {
-        $query = qq{SELECT $col_list FROM $sf_table};
-        return $self->_getStatementHandleForQuery($query);
+        return (qq{SELECT $col_list FROM $sf_table});
     }
 }
 
@@ -1456,7 +1484,7 @@ sub _get_clause_for_select_from_hash {
 
 =pod
 
-=head2 selectFromHashMulti($table, \%keys, \@cols)
+=head2 C<selectFromHashMulti($table, \%keys, \@cols)>
 
 Like selectFromHash(), but returns all rows in the result.
 Returns a reference to an array of hashrefs.
@@ -1481,7 +1509,7 @@ sub selectFromHashMulti {
 
 =pod
 
-=head2 selectAll($table, \@cols)
+=head2 C<selectAll($table, \@cols)>
 
 Selects every row in the given table.  Equivalent to leaving out
 %keys when calling selectFromHashMulti(), e.g.,
@@ -1505,7 +1533,7 @@ sub selectAll {
 
 =pod
 
-=head2 selectValueFromHash($table, \%keys, $col)
+=head2 C<selectValueFromHash($table, \%keys, $col)>
 
 Combination of nativeSelectValue() and selectFromHash().
 Returns the first column from the result of a query given by
@@ -1536,7 +1564,7 @@ sub selectValueFromHash {
 
 =pod
 
-=head2 selectValueFromHashMulti($table, \%keys, \@cols)
+=head2 C<selectValueFromHashMulti($table, \%keys, \@cols)>
 
 Like selectValueFromhash(), but returns the first column of all
 rows in the result.
@@ -1563,7 +1591,7 @@ sub selectValueFromHashMulti {
 
 =pod
 
-=head2 smartUpdate($table, \%keys, \%data)
+=head2 C<smartUpdate($table, \%keys, \%data)>
 
 Same as update(), except that a check is first made to see if
 there are any rows matching the data in %keys.  If so, update()
@@ -1577,8 +1605,11 @@ sub smartUpdate {
     unless (ref($data) eq 'HASH' and %$data) {
         return "0E";
     }
-    
+
+    # print STDERR "\n\n=====> calling exists: " . Data::Dumper->Dump([ $keys ], [ 'keys' ]) . "\n\n";
+
     if ($self->exists($table, $keys)) {
+        # print STDERR "\n\n====> calling update()\n\n";
         return $self->update($table, $keys, $data);
     } else {
         my %new_data = %$data;
@@ -1831,7 +1862,7 @@ sub _getStatementHandleForQuery {
     $self->_runPreExecHook($r);
 
     $exec_args = $r->getExecArgs;
-        
+
     my $rv = $sth->execute(@$exec_args);
         
     $r->setExecReturnValue($rv);
@@ -1868,15 +1899,15 @@ sub prepare_no_hooks {
 
 =pod
 
-=head2 nativeSelect($query, \@exec_args)
+=head2 C<nativeSelect($query, \@exec_args)>
 
- Executes the query in $query and returns a single row result (as
- a hash ref).  If there are multiple rows in the result, the rest
- get silently dropped.  @exec_args are the same arguments you
- would pass to an execute() called on a DBI object.  Returns
- undef on error.
+Executes the query in $query and returns a single row result (as
+a hash ref).  If there are multiple rows in the result, the rest
+get silently dropped.  @exec_args are the same arguments you
+would pass to an execute() called on a DBI object.  Returns
+undef on error.
 
- Aliases: native_select
+Aliases: native_select
 
 =cut
 sub nativeSelect {
@@ -1912,21 +1943,36 @@ sub nativeSelect {
 
 =pod
 
-=head2 nativeSelectExecLoop($query)
+=head2 C<nativeSelectExecLoop($query)>
 
- Like nativeSelect(), but returns a loop object that can be used
- to execute the same query over and over with different bind
- parameters.  This does a single DBI prepare() instead of a new
- prepare() for select.
+Like C<nativeSelect()>, but returns a loop object that can be used
+to execute the same query over and over with different bind
+parameters.  This does a single DBI C<prepare()> instead of a new
+C<prepare()> for select.
 
- E.g.,
+E.g.,
 
      my $loop = $db->nativeSelectExecLoop("SELECT * FROM mytable WHERE id=?");
      foreach my $id (@ids) {
          my $row = $loop->next([ $id ]);
      }
 
- Aliases: native_select_exec_loop
+To get the column names in the order returned from your query:
+ 
+ # returns the names with their character case the same as when
+ # calling $loop->next, i.e., the case set with $db->setNameArg
+ my $cols = $loop->get_field_names;
+ 
+ # returns the names with their character case unmodified
+ my $cols = $loop->get_names;
+ 
+ # returns the names in all upper-case
+ my $cols = $loop->get_names_uc;
+ 
+ # returns the names in all lower-case
+ my $cols = $loop->get_names_lc;
+
+Aliases: native_select_exec_loop
 
 =cut    
 # added for v 0.08
@@ -1941,13 +1987,13 @@ sub nativeSelectExecLoop {
 
 =pod
 
-=head2 nativeSelectWithArrayRef($query, \@exec_args)
+=head2 C<nativeSelectWithArrayRef($query, \@exec_args)>
 
- Like nativeSelect(), but return a reference to an array instead
- of a hash.  Returns undef on error.  If there are no results
- from the query, a reference to an empty array is returned.
+Like nativeSelect(), but return a reference to an array instead
+of a hash.  Returns undef on error.  If there are no results
+from the query, a reference to an empty array is returned.
 
- Aliases: native_select_with_array_ref, nswar
+Aliases: native_select_with_array_ref, nswar
 
 =cut
 sub nativeSelectWithArrayRef {
@@ -1988,14 +2034,14 @@ sub nativeSelectWithArrayRef {
 
 =pod
 
-=head2 nativeSelectMulti($query, \@exec_args)
+=head2 C<nativeSelectMulti($query, \@exec_args)>
 
- Executes the query in $query and returns an array of rows, where
- each row is a hash representing a row of the result.  Returns
- undef on error.  If there are no results for the query, an empty
- array ref is returned.
+Executes the query in $query and returns an array of rows, where
+each row is a hash representing a row of the result.  Returns
+undef on error.  If there are no results for the query, an empty
+array ref is returned.
 
- Aliases: native_select_multi
+Aliases: native_select_multi
 
 =cut
 sub nativeSelectMulti {
@@ -2040,13 +2086,13 @@ sub nativeSelectMulti {
 
 =pod
 
-=head2 nativeSelectMultiOrOne($query, \@exec_args)
+=head2 C<nativeSelectMultiOrOne($query, \@exec_args)>
 
- Like nativeSelectMulti(), but if there is only one row in the
- result, that row (a hash ref) is returned.  If there are zero
- rows, undef is returned. Otherwise, an array ref is returned.
+Like nativeSelectMulti(), but if there is only one row in the
+result, that row (a hash ref) is returned.  If there are zero
+rows, undef is returned. Otherwise, an array ref is returned.
 
- Aliases: native_select_multi_or_one
+Aliases: native_select_multi_or_one
 
 =cut
 # version 0.22
@@ -2074,12 +2120,12 @@ sub nativeSelectMultiOrOne {
 
 =pod
 
-=head2 nativeSelectMultiExecLoop($query)
+=head2 C<nativeSelectMultiExecLoop($query)>
 
- Like nativeSelectExecLoop(), but returns an array of rows, where
- each row is a hash representing a row of the result.
+Like nativeSelectExecLoop(), but returns an array of rows, where
+each row is a hash representing a row of the result.
 
- Aliases: native_select_multi_exec_loop
+Aliases: native_select_multi_exec_loop
 
 =cut
 sub nativeSelectMultiExecLoop {
@@ -2093,12 +2139,12 @@ sub nativeSelectMultiExecLoop {
 
 =pod
 
-=head2 nativeSelectMultiWithArrayRef($query, \@exec_args)
+=head2 C<nativeSelectMultiWithArrayRef($query, \@exec_args)>
 
- Like nativeSelectMulti(), but return a reference to an array of
- arrays instead of to an array of hashes.  Returns undef on error.
+Like nativeSelectMulti(), but return a reference to an array of
+arrays instead of to an array of hashes.  Returns undef on error.
 
- Aliases: native_select_multi_with_array_ref
+Aliases: native_select_multi_with_array_ref
 
 =cut    
 sub nativeSelectMultiWithArrayRef {
@@ -2140,13 +2186,13 @@ sub nativeSelectMultiWithArrayRef {
 
 =pod
 
-=head2 nativeSelectMapping($query, \@exec_args)
+=head2 C<nativeSelectMapping($query, \@exec_args)>
 
- Executes the given query and returns a reference to a hash
- containing the first and second columns of the results as
- key/value pairs.
+Executes the given query and returns a reference to a hash
+containing the first and second columns of the results as
+key/value pairs.
 
- Aliases: native_select_mapping, nsm
+Aliases: native_select_mapping, nsm
 
 =cut
 sub nativeSelectMapping {
@@ -2165,24 +2211,24 @@ sub nativeSelectMapping {
 
 =pod
 
-=head2 nativeSelectDynaMapping($query, \@cols, \@exec_args)
+=head2 C<nativeSelectDynaMapping($query, \@cols, \@exec_args)>
 
- Similar to nativeSelectMapping() except you specify which
- columns to use for the key/value pairs in the return hash.  If
- the first element of @cols starts with a digit, then @cols is
- assumed to contain indexes for the two columns you wish to use.
- Otherwise, @cols is assumed to contain the field names for the
- two columns you wish to use.
+Similar to nativeSelectMapping() except you specify which
+columns to use for the key/value pairs in the return hash.  If
+the first element of @cols starts with a digit, then @cols is
+assumed to contain indexes for the two columns you wish to use.
+Otherwise, @cols is assumed to contain the field names for the
+two columns you wish to use.
 
- For example,
+For example,
 
      nativeSelectMapping($query, \@exec_args) is
 
-  equivalent (and in fact calls) to
+equivalent (and in fact calls) to
 
      nativeSelectDynaMapping($query, [ 0, 1 ], $exec_args).
 
- Aliases: native_select_dyna_mapping, nsdm
+Aliases: native_select_dyna_mapping, nsdm
 
 =cut
 # FIXME: return undef on error
@@ -2233,12 +2279,12 @@ sub nativeSelectDynaMapping {
 
 =pod
 
-=head2 nativeSelectRecordMapping($query, \@exec_args)
+=head2 C<nativeSelectRecordMapping($query, \@exec_args)>
 
- Similar to nativeSelectMapping(), except the values in the hash
- are references to the corresponding record (as a hash).
+Similar to nativeSelectMapping(), except the values in the hash
+are references to the corresponding record (as a hash).
 
- Aliases: native_select_record_mapping
+Aliases: native_select_record_mapping
 
 =cut
 sub nativeSelectRecordMapping {
@@ -2257,14 +2303,14 @@ sub nativeSelectRecordMapping {
 
 =pod
 
-=head2 nativeSelectRecordDynaMapping($query, $col, \@exec_args)
+=head2 C<nativeSelectRecordDynaMapping($query, $col, \@exec_args)>
 
- Similar to nativeSelectRecordMapping(), except you specify
- which column is the key in each key/value pair in the hash.  If
- $col starts with a digit, then it is assumed to contain the
- index for the column you wish to use.  Otherwise, $col is
- assumed to contain the field name for the two columns you wish
- to use.
+Similar to nativeSelectRecordMapping(), except you specify
+which column is the key in each key/value pair in the hash.  If
+$col starts with a digit, then it is assumed to contain the
+index for the column you wish to use.  Otherwise, $col is
+assumed to contain the field name for the two columns you wish
+to use.
 
 =cut
 # FIXME: return undef on error
@@ -2312,14 +2358,14 @@ sub _getSqlObj {
 
 =pod
 
-=head2 nativeSelectValue($query, \@exec_args)
+=head2 C<nativeSelectValue($query, \@exec_args)>
 
- Returns a single value, the first column from the first row of
- the result.  Returns undef on error or if there are no rows in
- the result.  Note this may be the same value returned for a NULL
- value in the result.
+Returns a single value, the first column from the first row of
+the result.  Returns undef on error or if there are no rows in
+the result.  Note this may be the same value returned for a NULL
+value in the result.
 
- Aliases: native_select_value
+Aliases: native_select_value
 
 =cut        
 sub nativeSelectValue {
@@ -2344,13 +2390,13 @@ sub nativeSelectValue {
 
 =pod
 
-=head2 nativeSelectValuesArray($query, \@exec_args)
+=head2 C<nativeSelectValuesArray($query, \@exec_args)>
 
- Like nativeSelectValue(), but return multiple values, e.g.,
- return an array of ids for the query "SELECT id FROM WHERE
- color_pref='red'".
+Like nativeSelectValue(), but return multiple values, e.g.,
+return an array of ids for the query "SELECT id FROM WHERE
+color_pref='red'".
 
- Aliases: native_select_values_array
+Aliases: native_select_values_array
 
 =cut
 sub nativeSelectValuesArray {
@@ -2373,13 +2419,13 @@ sub nativeSelectValuesArray {
 
 =pod
 
-=head2 abstractSelect($table, \@fields, \%where, \@order)
+=head2 C<abstractSelect($table, \@fields, \%where, \@order)>
 
- Same as nativeSelect() except uses SQL::Abstract to generate the
- SQL.  See the POD for SQL::Abstract for usage.  You must have
- SQL::Abstract installed for this method to work.
+Same as nativeSelect() except uses SQL::Abstract to generate the
+SQL.  See the POD for SQL::Abstract for usage.  You must have
+SQL::Abstract installed for this method to work.
 
- Aliases: abstract_select
+Aliases: abstract_select
 
 =cut
 sub abstractSelect {
@@ -2398,13 +2444,13 @@ sub abstractSelect {
 
 =pod
 
-=head2 abstractSelectMulti($table, \@fields, \%where, \@order)
+=head2 C<abstractSelectMulti($table, \@fields, \%where, \@order)>
 
- Same as nativeSelectMulti() except uses SQL::Abstract to
- generate the SQL.  See the POD for SQL::Abstract for usage.  You
- must have SQL::Abstract installed for this method to work.
+Same as nativeSelectMulti() except uses SQL::Abstract to
+generate the SQL.  See the POD for SQL::Abstract for usage.  You
+must have SQL::Abstract installed for this method to work.
 
- Aliases: abstract_select_multi
+Aliases: abstract_select_multi
 
 =cut
 sub abstractSelectMulti {
@@ -2423,29 +2469,43 @@ sub abstractSelectMulti {
 
 =pod
 
-=head2 nativeSelectLoop($query, @exec_args)
+=head2 C<nativeSelectLoop($query, @exec_args)>
 
- Executes the query in $query, then returns an object that allows
- you to loop through one result at a time, e.g.,
-
+Executes the query in $query, then returns an object that allows
+you to loop through one result at a time, e.g.,
+ 
     my $loop = $db->nativeSelectLoop("SELECT * FROM my_table");
     while (my $row = $loop->next) {
         my $id = $$row{id};
     }
-
-    To get the number of rows selected, you can call the
-    rowCountCurrent() method on the loop object, e.g.,
-
+ 
+To get the number of rows selected, you can call the
+C<rowCountCurrent()> method on the loop object, e.g.,
+ 
     my $loop = $db->nativeSelectLoop("SELECT * FROM my_table");
     my $rows_in_result = $loop->rowCountCurrent;
+ 
+The C<count()> method is an alias for C<rowCountCurrent()>.
 
-    The count() method is an alias for rowCountCurrent().
+To get the number of rows returned by next() so far, use the
+C<rowCountTotal()> method.
 
-
-    To get the number of rows returned by next() so far, use the
-    rowCountTotal() method.
-
- Aliases: native_select_loop
+To get the column names in the order returned from your query:
+ 
+ # returns the names with their character case the same as when
+ # calling $loop->next, i.e., the case set with $db->setNameArg
+ my $cols = $loop->get_field_names;
+ 
+ # returns the names with their character case unmodified
+ my $cols = $loop->get_names;
+ 
+ # returns the names in all upper-case
+ my $cols = $loop->get_names_uc;
+ 
+ # returns the names in all lower-case
+ my $cols = $loop->get_names_lc;
+ 
+Aliases: native_select_loop
 
 =cut
 sub nativeSelectLoop {
@@ -2466,14 +2526,14 @@ sub nativeSelectLoop {
 
 =pod
 
-=head2 nativeQuery($query, \@exec_args, \%attr)
+=head2 C<nativeQuery($query, \@exec_args, \%attr)>
 
- Executes the query in $query and returns true if successful.
- This is typically used for deletes and is a catchall for
- anything the methods provided by this module don't take into
- account.
+Executes the query in $query and returns true if successful.
+This is typically used for deletes and is a catchall for
+anything the methods provided by this module don't take into
+account.
 
- Aliases: native_query
+Aliases: native_query
 
 =cut
 sub nativeQuery {
@@ -2494,16 +2554,16 @@ sub nativeQuery {
 
 =pod
 
-=head2 nativeQueryLoop($query)
+=head2 C<nativeQueryLoop($query)>
 
- A loop on nativeQuery, where any placeholders you have put in
- your query are bound each time you call next().  E.g.,
+A loop on nativeQuery, where any placeholders you have put in
+your query are bound each time you call next().  E.g.,
 
     my $loop = $db->nativeQueryLoop("UPDATE my_table SET value=? WHERE id=?");
     $loop->next([ 'one', 1]);
     $loop->next([ 'two', 2]);
 
- Aliases: native_query_loop
+Aliases: native_query_loop
 
 =cut
 sub nativeQueryLoop {
@@ -2551,30 +2611,30 @@ sub newCommand {
 
 =pod
 
-=head2 command($cmd_string)
+=head2 C<command($cmd_string)>
 
- This creates a literal SQL command for use in insert(),
- update(), and related methods, since if you simply put something
- like "CUR_DATE()" as a value in the %data parameter passed to
- insert, the function will get quoted, and so will not work as
- expected.  Instead, do something like this:
+This creates a literal SQL command for use in insert(),
+update(), and related methods, since if you simply put something
+like "CUR_DATE()" as a value in the %data parameter passed to
+insert, the function will get quoted, and so will not work as
+expected.  Instead, do something like this:
 
     my $data = { file => 'my_document.txt',
                  the_date => $db->command('CUR_DATE()')
                };
     $db->insert('my_doc_table', $data);
 
- This can also be done by passing a reference to a string with
- the SQL command, e.g.,
+This can also be done by passing a reference to a string with
+the SQL command, e.g.,
 
     my $data = { file => 'my_document.txt',
                  the_date => \'CUR_DATE()'
                };
     $db->insert('my_doc_table', $data);
 
- This is currently how command() is implemented.
+This is currently how command() is implemented.
 
- Aliases: literal, sql_literal
+Aliases: literal, sql_literal
 
 =cut
 sub command {
@@ -2594,7 +2654,7 @@ sub not {
 
 =pod
 
-=head2 debugOn(\*FILE_HANDLE)
+=head2 C<debugOn(\*FILE_HANDLE)>
 
 Turns on debugging output.  Debugging information will be printed
 to the given filehandle.
@@ -2614,7 +2674,7 @@ sub debugOn {
 
 =pod
 
-=head2 debugOff()
+=head2 C<debugOff()>
 
 Turns off debugging output.
 
@@ -2809,18 +2869,18 @@ sub getNameArg {
 
 =pod
 
-=head2 setNameArg($arg)
+=head2 C<setNameArg($arg)>
 
- This is the argument to pass to the fetchrow_hashref() call on
- the underlying DBI object.  By default, this is 'NAME_lc', so
- that all field names returned are all lowercase to provide for
- portable code.  If you want to make all the field names return
- be uppercase, call $db->setNameArg('NAME_uc') after the
- connect() call.  And if you really want the case of the field
- names to be what the underlying database driveer returns them
- as, call $db->setNameArg('NAME').
+This is the argument to pass to the fetchrow_hashref() call on
+the underlying DBI object.  By default, this is 'NAME_lc', so
+that all field names returned are all lowercase to provide for
+portable code.  If you want to make all the field names return
+be uppercase, call $db->setNameArg('NAME_uc') after the
+connect() call.  And if you really want the case of the field
+names to be what the underlying database driveer returns them
+as, call $db->setNameArg('NAME').
 
- Aliases: set_name_arg
+Aliases: set_name_arg
 
 =cut
 sub setNameArg {
@@ -2848,11 +2908,11 @@ sub getErrorNum {
 
 =pod
 
-=head2 err()
+=head2 C<err()>
 
- Calls err() on the underlying DBI object, which returns the
- native database engine error code from the last driver method
- called.
+Calls err() on the underlying DBI object, which returns the
+native database engine error code from the last driver method
+called.
 
 =cut
 sub err {
@@ -2864,11 +2924,11 @@ sub err {
 
 =pod
 
-=head2 errstr()
+=head2 C<errstr()>
 
- Calls errstr() on the underlying DBI object, which returns the
- native database engine error message from the last driver method
- called.
+Calls errstr() on the underlying DBI object, which returns the
+native database engine error message from the last driver method
+called.
 
 =cut
 sub errstr {
@@ -3041,14 +3101,14 @@ sub get_info {
 
 =head2 DBI-compatible methods
 
- The following method calls use the same interface as the DBI
- method.  However, these are not simply passed through to DBI
- (see DBI methods below), so any hooks you have defined for
- DBIx::Wrapper will be called.
+The following method calls use the same interface as the DBI
+method.  However, these are not simply passed through to DBI
+(see DBI methods below), so any hooks you have defined for
+DBIx::Wrapper will be called.
 
 =over 4
 
-=item do
+=item C<do>
 
 =back
 
@@ -3062,17 +3122,17 @@ sub do {
 
 =head2 DBI methods
 
- The following method calls are just passed through to the
- underlying DBI object for convenience.  See the documentation
- for DBI for details.
+The following method calls are just passed through to the
+underlying DBI object for convenience.  See the documentation
+for DBI for details.
 
 =over 4
 
-=item prepare
+=item C<prepare>
 
- This method may call hooks in the future.  Use
- prepare_no_hooks() if you want to ensure that it will be a
- simple DBI call.
+This method may call hooks in the future.  Use
+prepare_no_hooks() if you want to ensure that it will be a
+simple DBI call.
 
 =back
 
@@ -3091,7 +3151,7 @@ sub prepare {
 
 =over 4
 
-=item selectrow_arrayref
+=item C<selectrow_arrayref>
 
 =back
 
@@ -3106,7 +3166,7 @@ sub selectrow_arrayref {
 
 =over 4
 
-=item selectrow_hashref
+=item C<selectrow_hashref>
 
 =back
 
@@ -3121,7 +3181,7 @@ sub selectrow_hashref {
 
 =over 4
 
-=item selectall_arrayref
+=item C<selectall_arrayref>
 
 =back
 
@@ -3136,7 +3196,7 @@ sub selectall_arrayref {
 
 =over 4
 
-=item selectall_hashref
+=item C<selectall_hashref>
 
 =back
 
@@ -3151,7 +3211,7 @@ sub selectall_hashref {
 
 =over 4
 
-=item selectcol_arrayref
+=item C<selectcol_arrayref>
 
 =back
 
@@ -3166,7 +3226,7 @@ sub selectcol_arrayref {
 
 =over 4
 
-=item quote
+=item C<quote>
 
 =back
 
@@ -3181,7 +3241,7 @@ sub quote {
 
 =over 4
 
-=item commit
+=item C<commit>
 
 =back
 
@@ -3199,7 +3259,7 @@ sub commit {
 
 =over 4
 
-=item begin_work
+=item C<begin_work>
 
 =back
 
@@ -3217,7 +3277,7 @@ sub begin_work {
 
 =over 4
 
-=item rollback
+=item C<rollback>
 
 =back
 
@@ -3235,7 +3295,7 @@ sub rollback {
 
 =over 4
 
-=item ping
+=item C<ping>
 
 =back
 
@@ -3269,13 +3329,13 @@ sub ping {
 
 =pod
 
-=head2 getLastInsertId(), get_last_insert_id(), last_insert_id()
+=head2 C<getLastInsertId()>, C<get_last_insert_id()>, C<last_insert_id()>
 
- Returns the last_insert_id.  The default is to be MySQL
- specific.  It just runs the query "SELECT LAST_INSERT_ID()".
- However, it will also work with MSSQL with the right parameters
- (see the db_style parameter in the section explaining the
- connect() method).
+Returns the last_insert_id.  The default is to be MySQL
+specific.  It just runs the query "SELECT LAST_INSERT_ID()".
+However, it will also work with MSSQL with the right parameters
+(see the db_style parameter in the section explaining the
+connect() method).
 
 =cut
 sub getLastInsertId {
@@ -3288,21 +3348,9 @@ sub getLastInsertId {
         my $db_style = $self->_getDbStyle;
         my $dbd_driver = $self->_getDbdDriver;
         if (defined($db_style) and $db_style ne '') {
-            $db_style = lc($db_style);
-            if ($db_style eq 'mssql' or $db_style eq 'sybase' or $db_style eq 'asa'
-                or $db_style eq 'asany') {
-                $query = q{select @@IDENTITY};
-            } elsif ($db_style eq 'mysql') {
-                $query = qq{SELECT LAST_INSERT_ID()};
-            } else {
-                $query = qq{SELECT LAST_INSERT_ID()};
-            }
+            $query = $self->_get_query_for_last_insert_id($db_style);
         } elsif (defined($dbd_driver) and $dbd_driver ne '') {
-            if ($dbd_driver eq 'sybase' or $dbd_driver eq 'asany') {
-                $query = q{SELECT @@IDENTITY};
-            } else {
-                $query = qq{SELECT LAST_INSERT_ID()};
-            }
+            $query = $self->_get_query_for_last_insert_id($dbd_driver);
         } else {
             $query = qq{SELECT LAST_INSERT_ID()};
         }
@@ -3318,6 +3366,25 @@ sub getLastInsertId {
 
 *get_last_insert_id = \&getLastInsertId;
 *last_insert_id = \&getLastInsertId;
+
+sub _get_query_for_last_insert_id {
+    my ($self, $db_style) = @_;
+    my $query;
+
+    $db_style = lc($db_style);
+    if ($db_style eq 'mssql' or $db_style eq 'sybase' or $db_style eq 'asa'
+        or $db_style eq 'asany') {
+        $query = q{select @@IDENTITY};
+    } elsif ($db_style eq 'mysql') {
+        $query = qq{SELECT LAST_INSERT_ID()};
+    } elsif ($db_style eq 'sqlite') {
+        $query = qq{SELECT last_insert_rowid()};
+    } else {
+        $query = qq{SELECT LAST_INSERT_ID()};
+    }
+
+    return $query;
+}
 
 sub debug_dump {
     my $self = shift;
@@ -3400,7 +3467,7 @@ See L<DBIx::Wrapper::Request> for example hooks.
 
 =pod
 
-=head3 addPrePrepareHook($hook)
+=head3 C<addPrePrepareHook($hook)>
 
 Specifies a hook to be called just before any SQL statement is
 prepare()'d.
@@ -3418,7 +3485,7 @@ sub addPrePrepareHook {
 
 =pod
 
-=head3 addPostPrepareHook($hook)
+=head3 C<addPostPrepareHook($hook)>
 
 Specifies a hook to be called just after any SQL statement is
 prepare()'d.
@@ -3434,7 +3501,7 @@ sub addPostPrepareHook {
 
 =pod
 
-=head3 addPreExecHook($hook)
+=head3 C<addPreExecHook($hook)>
 
 Specifies a hook to be called just before any SQL statement is
 execute()'d.
@@ -3450,7 +3517,7 @@ sub addPreExecHook {
 
 =pod
 
-=head3 addPostExecHook($hook)
+=head3 C<addPostExecHook($hook)>
 
 Adds a hook to be called just after a statement is execute()'d.
 
@@ -3467,7 +3534,7 @@ sub addPostExecHook {
 
 =pod
 
-=head3 addPreFetchHook($hook)
+=head3 C<addPreFetchHook($hook)>
 
 Adds a hook to be called just before data is fetch()'d from the server.
 
@@ -3483,7 +3550,7 @@ sub addPreFetchHook {
 
 =pod
 
-=head3 addPostFetchHook($hook)
+=head3 C<addPostFetchHook($hook)>
 
 Adds a hook to be called just after data is fetch()'d from the server.
 
@@ -3527,35 +3594,35 @@ sub _to_csv_line {
 
 =pod
 
-=head3 to_csv($rows, \%params);
+=head3 C<to_csv($rows, \%params);>
 
- Convert the given query result rows in @rows to a CSV string.
- If each row is a hash, a header row will be included by the
- default giving the column names.  This method also supports rows
- as arrays, as well as $rows itself being a hash ref.
+Convert the given query result rows in @rows to a CSV string.
+If each row is a hash, a header row will be included by the
+default giving the column names.  This method also supports rows
+as arrays, as well as $rows itself being a hash ref.
 
- Valid parameters in %params:
+Valid parameters in %params:
 
 =over 4
 
-=item sep
+=item C<sep>
 
- The separator to use between columns.
+The separator to use between columns.
 
-=item quote
+=item C<quote>
 
- The quote to use in cases where values contain the separator.
- If a quote is found in a value, it is converted to two quotes
- and then the whole value is quoted.
+The quote to use in cases where values contain the separator.
+If a quote is found in a value, it is converted to two quotes
+and then the whole value is quoted.
 
-=item no_header
+=item C<no_header>
 
- If set to a true value, do not output the header row containing
- the column names.
+If set to a true value, do not output the header row containing
+the column names.
 
 =back
 
- Aliases: toCsv()
+Aliases: toCsv()
 
 =cut
 sub to_csv {
@@ -3626,19 +3693,19 @@ sub _hash_to_xml {
 
 =pod
 
-=head3 to_xml($data, \%params)
+=head3 C<to_xml($data, \%params)>
 
- Converts $data to xml.  $data is expected to be either a hash
- ref or a reference to an array of hash refs.  If $data is an
- array ref, enclosing tags are put around each record.  The tags
- are named "record" by default but can be changed by specifying
- record_tag in %params.  If $params{indent} is set to a true
- value, tags will be indented and unix newlines inserted.  This
- method does not output an encoding specification, e.g.,
+Converts $data to xml.  $data is expected to be either a hash
+ref or a reference to an array of hash refs.  If $data is an
+array ref, enclosing tags are put around each record.  The tags
+are named "record" by default but can be changed by specifying
+record_tag in %params.  If $params{indent} is set to a true
+value, tags will be indented and unix newlines inserted.  This
+method does not output an encoding specification, e.g.,
 
      <?xml version="1.0" encoding="utf-8"?>
 
- Aliases: toXml()
+Aliases: toXml()
 
 =cut
 sub to_xml {
@@ -3690,15 +3757,15 @@ sub escape_xml {
 
 =pod
 
-=head3 bencode($data)
+=head3 C<bencode($data)>
 
- Returns the bencoded representation of $data (arbitrary
- datastructure -- but not objects).  This module extends the
- bencode scheme to support undef.  See
- L<http://en.wikipedia.org/wiki/Bencode> for details on the bencode
- encoding.
+Returns the bencoded representation of $data (arbitrary
+datastructure -- but not objects).  This module extends the
+bencode scheme to support undef.  See
+L<http://en.wikipedia.org/wiki/Bencode> for details on the bencode
+encoding.
 
- Aliases: bEncode()
+Aliases: bEncode()
 
 =cut
 sub bencode {
@@ -3743,12 +3810,12 @@ sub bencode {
 
 =pod
 
-=head3 bdecode($encoded_str)
+=head3 C<bdecode($encoded_str)>
 
- The opposite of bencode().  Returns the deserialized data from
- the bencoded string.
+The opposite of bencode().  Returns the deserialized data from
+the bencoded string.
 
- Aliases: bDecode()
+Aliases: bDecode()
 
 =cut
 sub bdecode {
@@ -3806,13 +3873,13 @@ sub _bdecode {
 
 =pod
 
-=head3 to_json($data)
+=head3 C<to_json($data)>
 
- Returns the JSON representation of $data (arbitrary
- datastructure -- but not objects).  See http://www.json.org/ or
- http://en.wikipedia.org/wiki/JSON for details.  In this
- implementation, hash keys are sorted so that the output is
- consistent.
+Returns the JSON representation of $data (arbitrary
+datastructure -- but not objects).  See http://www.json.org/ or
+http://en.wikipedia.org/wiki/JSON for details.  In this
+implementation, hash keys are sorted so that the output is
+consistent.
 
 =cut
 sub to_json {
@@ -4148,8 +4215,6 @@ sub _do_benchmark {
                                }
                                       );
 
-    # print Data::Dumper->Dump([ $results ], [ 'results' ]) . "\n";
-    
 }
 
 sub AUTOLOAD {
@@ -4171,27 +4236,33 @@ sub AUTOLOAD {
 
 =head2 There are also underscore_separated versions of these methods.
 
-    E.g., nativeSelectLoop() becomes native_select_loop()
+E.g., nativeSelectLoop() becomes native_select_loop()
 
 =head1 DEPENDENCIES
 
-    DBI
+DBI
 
 =head1 ACKNOWLEDGEMENTS
 
-    Others who have contributed ideas and/or code for this module:
+Others who have contributed ideas and/or code for this module:
 
-    Kevin Wilson
-    Mark Stosberg
-    David Bushong
+=over 4
+
+=item Kevin Wilson
+
+=item Mark Stosberg
+
+=item David Bushong
+
+=back
 
 =head1 AUTHOR
 
-    Don Owens <don@regexguy.com>
+Don Owens <don@regexguy.com>
 
 =head1 LICENSE AND COPYRIGHT
 
-Copyright (c) 2003-2006 Don Owens (don@regexguy.com).  All rights reserved.
+Copyright (c) 2003-2010 Don Owens (don@regexguy.com).  All rights reserved.
 
 This free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.  See perlartistic.
@@ -4203,11 +4274,11 @@ PURPOSE.
 
 =head1 SEE ALSO
 
-    DBI, perl
+DBI, perl
 
 =head1 VERSION
 
-    0.25
+0.26
 
 =cut
 

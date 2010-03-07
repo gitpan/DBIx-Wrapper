@@ -33,6 +33,7 @@ use Carp;
                   EXE_FILES => [],
                   PREREQ_PM => {
                                 DBI => 0,
+                                'Test::More' => 0,
                                 # 'Scalar::Util' => 0,
                                 # 'SQL::Abstract' => 0
                                },

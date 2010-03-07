@@ -1,3 +1,11 @@
+Version 0.26
+        * in select_from_hash, allow elements of $cols to be reference
+          to strings, in which case, they are used literally in the
+          query instead of escaping them, e.g., \"UNIXTIMESTAMP(NOW())"
+        * updated formatting in docs
+        * get_field_names(), get_names(), get_names_uc(), and
+          get_names_lc() methods to loop objects
+
 Version 0.25
 	* Fixed docs for nativeSelectLoop() and nativeQuery()
 	* In nativeSelectDynaMapping(), check that the hash keys for

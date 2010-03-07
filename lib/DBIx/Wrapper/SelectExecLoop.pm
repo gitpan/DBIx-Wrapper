@@ -2,9 +2,9 @@
 # Creation date: 2004-04-21 10:45:30
 # Authors: Don
 # Change log:
-# $Id: SelectExecLoop.pm,v 1.7 2006/03/26 19:18:35 don Exp $
+# $Revision: 1469 $
 
-# Copyright (c) 2004-2006 Don Owens
+# Copyright (c) 2004-2008 Don Owens
 #
 # All rights reserved. This program is free software; you can
 # redistribute it and/or modify it under the same terms as Perl
@@ -15,7 +15,7 @@ use strict;
 {   package DBIx::Wrapper::SelectExecLoop;
 
     use vars qw($VERSION);
-    $VERSION = do { my @r=(q$Revision: 1.7 $=~/\d+/g); sprintf "%d."."%02d"x$#r,@r };
+    $VERSION = do { my @r=(q$Revision: 1469 $=~/\d+/g); sprintf "%d."."%02d"x$#r,@r };
 
     use base 'DBIx::Wrapper::Statement';
     

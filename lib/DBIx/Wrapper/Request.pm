@@ -1,14 +1,14 @@
 # -*-perl-*-
 # Creation date: 2004-10-29 14:01:59
 # Authors: Don
-# $Id: Request.pm,v 1.7 2006/03/26 19:18:35 don Exp $
+# $Revision: 1469 $
 
 use strict;
 
 {   package DBIx::Wrapper::Request;
 
     use vars qw($VERSION);
-    $VERSION = do { my @r=(q$Revision: 1.7 $=~/\d+/g); sprintf "%d."."%02d"x$#r,@r };
+    $VERSION = do { my @r=(q$Revision: 1469 $=~/\d+/g); sprintf "%d."."%02d"x$#r,@r };
 
     sub new {
         my $proto = shift;
@@ -292,6 +292,6 @@ PURPOSE.
 
 =head1 VERSION
 
-$Id: Request.pm,v 1.7 2006/03/26 19:18:35 don Exp $
+$Id: Request.pm 1469 2010-03-07 03:51:28Z don $
 
 =cut
