@@ -1,6 +1,6 @@
 --- #YAML:1.0
 name:               DBIx-Wrapper
-version:            0.26
+version:            0.27
 abstract:           Wrapper Module for the DBI
 author:
     - DON OWENS <don@owensnet.com>

@@ -24,18 +24,16 @@ else {
     exit 0;
 }
 
-# my $top_dir;
+my $top_dir;
 
-# # Set up @INC to get right version of module
-# use File::Spec ();
-# BEGIN {
-#     my $path = File::Spec->rel2abs($0);
-#     (my $dir = $path) =~ s{(?:/[^/]+){2}\Z}{};
-#     unshift @INC, $dir . "/lib";
-#     $top_dir = $dir;
-# }
+use File::Spec ();
+BEGIN {
+    my $path = File::Spec->rel2abs($0);
+    (my $dir = $path) =~ s{(?:/[^/]+){2}\Z}{};
+    # unshift @INC, $dir . "/lib";
+    $top_dir = $dir;
+}
 
-    
 use DBIx::Wrapper;
 
 my $self = bless { };
@@ -53,13 +51,26 @@ my $val;
 my $ok;
 my $val2;
 
-my $db_fh = File::Temp->new(UNLINK => 1);
-my $db_file = $db_fh->filename;
+my $db_fh;
+my $db_file;
+my $conf_fh;
+my $conf_file;
+
+my $test_dir = "$top_dir/t";
+if (-w $test_dir) {
+    $db_fh = File::Temp->new(UNLINK => 1, DIR => $test_dir);
+    $conf_fh = File::Temp->new(UNLINK => 1, DIR => $test_dir);
+}
+else {
+    $db_fh = File::Temp->new(UNLINK => 1);
+    $conf_fh = File::Temp->new(UNLINK => 1);
+}
+
+$db_file = $db_fh->filename;
+$conf_file = $conf_fh->filename;
 
 # print STDERR "\n\n====================> db file=$db_file\n\n";
 
-my $conf_fh = File::Temp->new(UNLINK => 1);
-my $conf_file = $conf_fh->filename;
 
 $self->write_config_file($conf_fh, $db_file);
 
