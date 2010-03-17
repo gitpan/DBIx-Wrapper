@@ -16,6 +16,11 @@ my $have_sqlite;
     }
 }
 
+if ($ENV{AUTOMATED_TESTING}) {
+    plan skip_all => 'skipping db tests under automated testing';
+    exit 0;
+}
+
 if ($have_sqlite) {
     plan tests => 50;
 }

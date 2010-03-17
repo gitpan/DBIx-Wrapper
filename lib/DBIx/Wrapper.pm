@@ -2,7 +2,7 @@
 # Creation date: 2003-03-30 12:17:42
 # Authors: Don
 # Change log:
-# $Revision: 1478 $
+# $Revision: 1503 $
 #
 # Copyright (c) 2003-2010 Don Owens (don@regexguy.com)
 #
@@ -199,7 +199,7 @@ use Carp ();
 our $AUTOLOAD;
 our $Heavy = 0;
 
-our $VERSION = '0.27';      # update below in POD as well
+our $VERSION = '0.28';      # update below in POD as well
 
 use DBI;
 use DBIx::Wrapper::Request;
@@ -4278,7 +4278,7 @@ DBI, perl
 
 =head1 VERSION
 
-0.27
+0.28
 
 =cut
 

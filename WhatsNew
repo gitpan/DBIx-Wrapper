@@ -1,3 +1,7 @@
+Version 0.28
+        * check for $ENV{AUTOMATED_TESTING} to skip using SQLite under
+          automated testing.
+
 Version 0.27
         * modify tests in t/01sqlite.t to create temp files in the t
           directory instead of the default temp directory used by
