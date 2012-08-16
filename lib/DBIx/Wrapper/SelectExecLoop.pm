@@ -2,9 +2,9 @@
 # Creation date: 2004-04-21 10:45:30
 # Authors: Don
 # Change log:
-# $Revision: 1469 $
+# $Revision: 1963 $
 
-# Copyright (c) 2004-2008 Don Owens
+# Copyright (c) 2004-2012 Don Owens
 #
 # All rights reserved. This program is free software; you can
 # redistribute it and/or modify it under the same terms as Perl
@@ -15,7 +15,7 @@ use strict;
 {   package DBIx::Wrapper::SelectExecLoop;
 
     use vars qw($VERSION);
-    $VERSION = do { my @r=(q$Revision: 1469 $=~/\d+/g); sprintf "%d."."%02d"x$#r,@r };
+    $VERSION = do { my @r=(q$Revision: 1963 $=~/\d+/g); sprintf "%d."."%02d"x$#r,@r };
 
     use base 'DBIx::Wrapper::Statement';
     

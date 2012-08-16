@@ -1,3 +1,6 @@
+Version 0.29
+        * Fixed up POD a bit.
+
 Version 0.28
         * check for $ENV{AUTOMATED_TESTING} to skip using SQLite under
           automated testing.

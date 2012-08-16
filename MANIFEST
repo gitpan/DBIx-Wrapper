@@ -11,6 +11,7 @@ lib/DBIx/Wrapper/StatementLoop.pm
 lib/DBIx/Wrapper/Statement.pm
 lib/DBIx/Wrapper/Delegator.pm
 lib/DBIx/Wrapper/DBIDelegator.pm
+lib/DBIx/Wrapper/Changes.pm
 t/00use.t
 t/01sqlite.t
 WhatsNew

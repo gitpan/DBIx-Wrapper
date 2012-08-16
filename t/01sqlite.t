@@ -63,16 +63,18 @@ my $conf_file;
 
 my $test_dir = "$top_dir/t";
 if (-w $test_dir) {
-    $db_fh = File::Temp->new(UNLINK => 1, DIR => $test_dir);
+    $db_fh = File::Temp->new(UNLINK => 0, DIR => $test_dir);
     $conf_fh = File::Temp->new(UNLINK => 1, DIR => $test_dir);
 }
 else {
-    $db_fh = File::Temp->new(UNLINK => 1);
+    $db_fh = File::Temp->new(UNLINK => 0);
     $conf_fh = File::Temp->new(UNLINK => 1);
 }
 
 $db_file = $db_fh->filename;
 $conf_file = $conf_fh->filename;
+
+$db_fh->close;
 
 # print STDERR "\n\n====================> db file=$db_file\n\n";
 
@@ -334,6 +336,8 @@ $val = $db->native_select_value("select the_value from $table where id=4");
 ok($val eq 'four four', 'native_select_value');
 
 # print "\n\n$num_tests tests\n\n";
+
+unlink $db_file;
 
 exit 0;
 

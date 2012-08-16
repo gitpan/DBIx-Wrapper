@@ -1,7 +1,7 @@
 # Creation date: 2005-10-16 20:42:19
 # Authors: don
 
-# Copyright (c) 2005-2010 Don Owens <don@owensnet.com>.  All rights reserved.
+# Copyright (c) 2005-2012 Don Owens <don@owensnet.com>.  All rights reserved.
 
 # This is free software; you can redistribute it and/or modify it
 # under the same terms as Perl itself.  See perlartistic.
@@ -17,7 +17,7 @@ use warnings;
 package DBIx::Wrapper::DBIDelegator;
 
 use vars qw($VERSION);
-$VERSION = do { my @r=(q$Revision: 1469 $=~/\d+/g); sprintf "%d."."%02d"x$#r,@r };
+$VERSION = do { my @r=(q$Revision: 1963 $=~/\d+/g); sprintf "%d."."%02d"x$#r,@r };
 
 # use Scalar::Util qw(refaddr);
 use Carp qw(cluck);

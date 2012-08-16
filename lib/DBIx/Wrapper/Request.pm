@@ -1,14 +1,14 @@
 # -*-perl-*-
 # Creation date: 2004-10-29 14:01:59
 # Authors: Don
-# $Revision: 1469 $
+# $Revision: 1963 $
 
 use strict;
 
 {   package DBIx::Wrapper::Request;
 
     use vars qw($VERSION);
-    $VERSION = do { my @r=(q$Revision: 1469 $=~/\d+/g); sprintf "%d."."%02d"x$#r,@r };
+    $VERSION = do { my @r=(q$Revision: 1963 $=~/\d+/g); sprintf "%d."."%02d"x$#r,@r };
 
     sub new {
         my $proto = shift;
@@ -96,12 +96,12 @@ use strict;
 
 =head1 NAME
 
- DBIx::Wrapper::Request - Request object for database operations
+DBIx::Wrapper::Request - Request object for database operations
 
 =head1 SYNOPSIS
 
- Objects of the class are created by DBIx::Wrapper objects and
- passed to hooks.  You should never have to create one yourself.
+Objects of the class are created by DBIx::Wrapper objects and
+passed to hooks.  You should never have to create one yourself.
 
  my $db = $req->getDbObj;
 
@@ -125,64 +125,64 @@ use strict;
 
 =head1 DESCRIPTION
 
- DBIx::Wrapper::Request objects are used to encapsulate date
- passed between DBIx::Wrapper methods at various stages of
- executing a query.
+DBIx::Wrapper::Request objects are used to encapsulate date
+passed between DBIx::Wrapper methods at various stages of
+executing a query.
 
 =head1 METHODS
 
-=head2 getDbObj()
+=head2 C<getDbObj()>
 
- Returns the DBIx::Wrapper object that created the Request object.
+Returns the DBIx::Wrapper object that created the Request object.
 
-=head2 getQuery()
+=head2 C<getQuery()>
 
- Returns the current query.
+Returns the current query.
 
-=head2 setQuery($query)
+=head2 C<setQuery($query)>
 
- Sets the current query.
+Sets the current query.
 
-=head2 getExecArgs()
+=head2 C<getExecArgs()>
 
- Returns a reference to the array of execute arguments passed to
- the DBIx::Wrapper method currently executing.
+Returns a reference to the array of execute arguments passed to
+the DBIx::Wrapper method currently executing.
 
-=head2 setExecArgs(\@args);
+=head2 C<setExecArgs(\@args)>
 
- Sets the current execute arguments.
+Sets the current execute arguments.
 
-=head2 getExecReturnValue()
+=head2 C<getExecReturnValue()>
 
- Returns the current execute() return value.
+Returns the current execute() return value.
 
-=head2 setExecReturnValue($rv);
+=head2 C<setExecReturnValue($rv)>
 
- Sets the current execute() return value.
+Sets the current execute() return value.
 
-=head2 getReturnVal()
+=head2 C<getReturnVal()>
 
- Gets the current return value (from a fetch).
+Gets the current return value (from a fetch).
 
-=head2 setReturnVal($rv)
+=head2 C<setReturnVal($rv)>
 
- Sets the current return value (from a fetch).
+Sets the current return value (from a fetch).
 
-=head2 getStatementHandle()
+=head2 C<getStatementHandle()>
 
- Get the current statement handle being used.
+Get the current statement handle being used.
 
-=head2 setStatementHandle($sth)
+=head2 C<setStatementHandle($sth)>
 
- Set the current statement handle to use.
+Set the current statement handle to use.
 
-=head2 $req->getErrorStr()
+=head2 C<$req->getErrorStr()>
 
- Get the error string.
+Get the error string.
 
-=head2 setErrorStr($err_str)
+=head2 C<setErrorStr($err_str)>
 
- Set the error string.
+Set the error string.
 
 
 =head1 EXAMPLES
@@ -275,11 +275,11 @@ use strict;
 
 =head1 AUTHOR
 
-    Don Owens <don@regexguy.com>
+Don Owens <don@regexguy.com>
 
 =head1 LICENSE AND COPYRIGHT
 
-Copyright (c) 2004-2006 Don Owens (don@regexguy.com).  All rights reserved.
+Copyright (c) 2004-2012 Don Owens (don@regexguy.com).  All rights reserved.
 
 This free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.  See perlartistic.
@@ -292,6 +292,6 @@ PURPOSE.
 
 =head1 VERSION
 
-$Id: Request.pm 1469 2010-03-07 03:51:28Z don $
+$Id: Request.pm 1963 2012-01-17 15:41:53Z don $
 
 =cut
